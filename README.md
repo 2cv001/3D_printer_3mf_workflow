@@ -23,8 +23,8 @@ This macro uses .3mf files, allowing full geometry + print configuration to be p
 
 # Smoothing Principle
 
-To eliminate visible facets, the macro adjusts the Deviation and Angular properties before exporting the .3mf file.
-
+The macro exports the selected objects to a 3MF file using the specified tessellation parameters (LinearDeflection and AngularDeflection). 
+It generates temporary mesh objects for the export process and automatically removes them afterward.
 
 
 
