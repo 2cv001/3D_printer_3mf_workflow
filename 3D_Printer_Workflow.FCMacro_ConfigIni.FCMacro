@@ -3,7 +3,7 @@ import os, sys, configparser, ast
 from PySide import QtGui, QtCore
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
-INI_FILE = os.path.join(SCRIPT_DIR, "3mfToPrint.ini")
+INI_FILE = os.path.join(SCRIPT_DIR, "3D_Printer_3mf_Workflow.ini")
 
 # -------------------------
 # Traductions multilingues
