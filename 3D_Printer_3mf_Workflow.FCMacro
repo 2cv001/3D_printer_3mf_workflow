@@ -49,7 +49,7 @@ import gc
 # -------------------------
 # Constantes et configuration
 # -------------------------
-INI_FILE = os.path.join(os.path.dirname(__file__), "3mfToPrint.ini")
+INI_FILE = os.path.join(os.path.dirname(__file__), "3D_Printer_3mf_Workflow.ini")
 PLATEAU_X, PLATEAU_Y, PLATEAU_Z = 240, 240, 0
 MAX_OLD_BACKUPS = 5
 
