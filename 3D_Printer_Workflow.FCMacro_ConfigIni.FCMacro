@@ -1,0 +1,232 @@
+# -*- coding: utf-8 -*-
+import os, sys, configparser, ast
+from PySide import QtGui, QtCore
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+INI_FILE = os.path.join(SCRIPT_DIR, "3mfToPrint.ini")
+
+# -------------------------
+# Traductions multilingues
+# -------------------------
+TRANSLATIONS = {
+    "fr": {
+        "dialog_title": "Programmes utilisateurs",
+        "col_command": "Commande",
+        "col_label": "Label",
+        "col_delay": "Délai (s)",
+        "col_default": "Activé par défaut",
+        "hint_command": (
+            "<b>Commande à exécuter :</b><br>"
+            "Exemple simple : calc.exe<br>"
+            "Exemple avec arguments : curl https://monserveur/api --insecure<br>"
+            "Exemple requête HTTP avec argument : curl -X POST https://domotique/api "
+            "-d 'apikey=12345&action=on'<br>"
+            "Exemple Shelly Gen2 : curl -u admin:motDePass --insecure "
+            "http://IpDeLaPriseShelly/rpc/Switch.Set?id=0&on=true"
+        ),
+        "hint_label": "Texte affiché dans la case à cocher.",
+        "hint_delay": "Délai en secondes avant exécution.",
+        "hint_default": "Si coché, la commande sera activée par défaut.",
+        "btn_add": "Ajouter",
+        "btn_del": "Supprimer",
+        "new_program": "Nouveau programme",
+        "tooltip_cmd": "Programme + arguments, ex: calc.exe ou curl https://... --insecure",
+        "tooltip_label": "Texte affiché à l’utilisateur",
+        "tooltip_delay": "Temps d’attente avant exécution"
+    },
+    "en": {
+        "dialog_title": "User Programs",
+        "col_command": "Command",
+        "col_label": "Label",
+        "col_delay": "Delay (s)",
+        "col_default": "Enabled by default",
+        "hint_command": (
+            "<b>Command to execute:</b><br>"
+            "Simple example: calc.exe<br>"
+            "Example with arguments: curl https://myserver/api --insecure<br>"
+            "HTTP request with argument: curl -X POST https://domotics/api "
+            "-d 'apikey=12345&action=on'<br>"
+            "Shelly Gen2 example: curl -u admin:password --insecure "
+            "http://ShellyDeviceIP/rpc/Switch.Set?id=0&on=true"
+        ),
+        "hint_label": "Text displayed in the checkbox.",
+        "hint_delay": "Delay in seconds before execution.",
+        "hint_default": "If checked, the command will be enabled by default.",
+        "btn_add": "Add",
+        "btn_del": "Delete",
+        "new_program": "New program",
+        "tooltip_cmd": "Program + arguments, e.g. calc.exe or curl https://... --insecure",
+        "tooltip_label": "Text displayed to the user",
+        "tooltip_delay": "Waiting time before execution"
+    }
+}
+
+
+
+def get_user_language():
+    try:
+        locale = FreeCADGui.getLocale().lower()
+        # Normalisation
+        if locale.startswith("fr") or "french" in locale:
+            return "fr"
+        if locale.startswith("en") or "english" in locale:
+            return "en"
+        '''
+        if locale.startswith("de") or "german" in locale:
+            return "de"
+        if locale.startswith("es") or "spanish" in locale:
+            return "es"
+        if locale.startswith("it") or "italian" in locale:
+            return "it"
+        '''    
+        # Fallback
+        return "en"
+    except Exception:
+        return "en"
+
+
+def tr(key):
+    lang = get_user_language()
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+
+# -------------------------
+# Fonctions INI
+# -------------------------
+def load_extra_commands_from_ini(path=INI_FILE):
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(path, encoding="utf-8")
+        if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
+            return ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
+    except Exception as e:
+        print("⚠️ Erreur lecture EXTRA_COMMANDS ini:", e)
+    return []
+
+def save_extra_commands_to_ini(commands, path=INI_FILE):
+    cfg = configparser.ConfigParser()
+    if os.path.exists(path):
+        try:
+            cfg.read(path, encoding="utf-8")
+        except Exception as e:
+            print("⚠️ Erreur lecture ini:", e)
+    if "extra_commands" not in cfg:
+        cfg["extra_commands"] = {}
+    cfg["extra_commands"]["EXTRA_COMMANDS"] = str(commands)
+    with open(path, "w", encoding="utf-8") as f:
+        cfg.write(f)
+
+# -------------------------
+# Boîte de dialogue
+# -------------------------
+def show_extra_commands_dialog():
+    dialog = QtGui.QDialog()
+    dialog.setWindowTitle(tr("dialog_title"))
+    dialog.setMinimumWidth(700)
+
+    layout = QtGui.QVBoxLayout()
+
+    table = QtGui.QTableWidget()
+    table.setColumnCount(4)
+
+    # Création des items d'en-tête avec tooltips
+    header_items = [
+        QtGui.QTableWidgetItem(tr("col_command")),
+        QtGui.QTableWidgetItem(tr("col_label")),
+        QtGui.QTableWidgetItem(tr("col_delay")),
+        QtGui.QTableWidgetItem(tr("col_default"))
+    ]
+
+    header_items[0].setToolTip(tr("hint_command"))
+    header_items[1].setToolTip(tr("hint_label"))
+    header_items[2].setToolTip(tr("hint_delay"))
+    header_items[3].setToolTip(tr("hint_default"))
+
+    for i, item in enumerate(header_items):
+        table.setHorizontalHeaderItem(i, item)
+
+    header = table.horizontalHeader()
+    header.setStretchLastSection(False)
+    header.setSectionsMovable(False)
+    header.setSectionResizeMode(QtGui.QHeaderView.Interactive)
+
+    table.setColumnWidth(0, 300)
+    table.setColumnWidth(1, 200)
+    table.setColumnWidth(2, 80)
+    table.setColumnWidth(3, 120)
+
+    # Chargement des commandes existantes
+    EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE)
+    for cmd, label, delay, default in EXTRA_COMMANDS:
+        row = table.rowCount()
+        table.insertRow(row)
+        item_cmd = QtGui.QTableWidgetItem(" ".join(cmd))
+        item_cmd.setToolTip(tr("tooltip_cmd"))
+        table.setItem(row, 0, item_cmd)
+
+        item_label = QtGui.QTableWidgetItem(label)
+        item_label.setToolTip(tr("tooltip_label"))
+        table.setItem(row, 1, item_label)
+
+        item_delay = QtGui.QTableWidgetItem(str(delay))
+        item_delay.setToolTip(tr("tooltip_delay"))
+        table.setItem(row, 2, item_delay)
+
+        chk = QtGui.QCheckBox()
+        chk.setChecked(default)
+        table.setCellWidget(row, 3, chk)
+
+    layout.addWidget(table)
+
+    # Boutons Ajouter / Supprimer
+    btn_add = QtGui.QPushButton(tr("btn_add"))
+    btn_del = QtGui.QPushButton(tr("btn_del"))
+    h_btns = QtGui.QHBoxLayout()
+    h_btns.addWidget(btn_add)
+    h_btns.addWidget(btn_del)
+    layout.addLayout(h_btns)
+
+    def add_row():
+        row = table.rowCount()
+        table.insertRow(row)
+        table.setItem(row, 0, QtGui.QTableWidgetItem(""))
+        table.setItem(row, 1, QtGui.QTableWidgetItem(tr("new_program")))
+        table.setItem(row, 2, QtGui.QTableWidgetItem("0"))
+        chk = QtGui.QCheckBox()
+        chk.setChecked(False)
+        table.setCellWidget(row, 3, chk)
+
+    def del_row():
+        row = table.currentRow()
+        if row >= 0:
+            table.removeRow(row)
+
+    btn_add.clicked.connect(add_row)
+    btn_del.clicked.connect(del_row)
+
+    # Boutons OK / Annuler
+    btns = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+    layout.addWidget(btns)
+    dialog.setLayout(layout)
+
+    def save():
+        new_cmds = []
+        for row in range(table.rowCount()):
+            cmd_str = table.item(row, 0).text().strip()
+            label = table.item(row, 1).text().strip()
+            delay = int(table.item(row, 2).text().strip())
+            chk = table.cellWidget(row, 3)
+            default = chk.isChecked()
+            if cmd_str:
+                new_cmds.append((cmd_str.split(), label, delay, default))
+        save_extra_commands_to_ini(new_cmds)
+        dialog.accept()
+
+    btns.accepted.connect(save)
+    btns.rejected.connect(dialog.reject)
+    dialog.exec()
+
+# -------------------------
+# Universal launch (FreeCAD)
+# -------------------------
+if __name__ == "__main__":
+    show_extra_commands_dialog()
