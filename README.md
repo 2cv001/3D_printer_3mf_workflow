@@ -85,7 +85,7 @@ Without visible facets
     • The macro can be configured to run other commands, such as turning on the printer using a connected smart plug.
 
 
-## Installation
+## Installation and use
 
     1. Copy the macro to your FreeCAD macros folder 
     
@@ -94,6 +94,11 @@ Without visible facets
     4. On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or “Save” in the menu).
     
     5. On next launches, enjoy automatic reuse of your settings 
+
+
+
+<img width="955" height="524" alt="image" src="https://github.com/user-attachments/assets/cdd0f980-068b-471c-afc3-3b5b58d9a292" />
+
 
 
 ## Why 3MF?
