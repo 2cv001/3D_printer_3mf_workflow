@@ -97,7 +97,7 @@ Without visible facets
 
 
 
-<img width="955" height="524" alt="image" src="https://github.com/user-attachments/assets/cdd0f980-068b-471c-afc3-3b5b58d9a292" />
+<img width="1603" height="863" alt="image" src="https://github.com/user-attachments/assets/3e4fe3e8-5ca2-4088-8b3f-57fdbaa668fb" />
 
 
 
