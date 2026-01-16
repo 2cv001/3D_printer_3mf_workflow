@@ -63,7 +63,7 @@ else:
     DEFAULT_SLICER_EXE = ""
 
 DEFAULT_LINEAR_DEFLECTION = 0.01
-DEFAULT_ANGULAR_DEGREES = 3.0
+DEFAULT_ANGULAR_DEGREES = 2
 DEFAULT_ANGULAR_DEFLECTION = DEFAULT_ANGULAR_DEGREES * math.pi / 180.0
 
 EXTRA_COMMANDS = [
@@ -110,8 +110,8 @@ TRANSLATIONS = {
         "generate_stl": "En plus du .3mf, générer également un STL",
         "launch_slicer": "Lancer le slicer",
         "browse": "Parcourir…",
-        "linear_label": "Précision (LinearDeflection) entre 0.01 et 10. Haute qualité : 0.01",
-        "angular_label": "Tolérance angulaire (AngularDeflection) en degrés (ex: 3)",
+        "linear_label": "Précision (LinearDeflection). Entre 0.01 et 10. Haute qualité : 0.01",
+        "angular_label": "Tolérance angulaire (AngularDeflection) (ex: 3)",
         "external_actions": "Actions externes à exécuter avant fermeture :",
         "ignore_transform": "Ne pas récupérer la position/rotation du slicer",
         "base3mf_label": "Fichier 3MF pour paramètres impr. :",
@@ -193,8 +193,8 @@ TRANSLATIONS = {
         "generate_stl": "Also generate an STL along with the 3MF",
         "launch_slicer": "Launch slicer",
         "browse": "Browse…",
-        "linear_label": "Precision (LinearDeflection) between 0.01 and 10. High quality: 0.01",
-        "angular_label": "Angular tolerance (AngularDeflection) in degrees (e.g. 3)",
+        "linear_label": "Precision (LinearDeflection). Between 0.01 and 10. High quality: 0.01",
+        "angular_label": "Angular tolerance (AngularDeflection) (e.g. 3)",
         "external_actions": "External actions to execute before closing:",
         "ignore_transform": "Do not recover slicer position/rotation",
         "base3mf_label": "3MF file for print parameters:",
@@ -496,6 +496,9 @@ def ask_user_options(current_slicer, current_linear, current_angular):
     except Exception:
         spin_lin.setValue(DEFAULT_LINEAR_DEFLECTION)
     h_lin.addWidget(spin_lin)
+    lbl_lin_unit = QtGui.QLabel("% bounding box")
+    h_lin.addWidget(lbl_lin_unit)
+
     h_lin.addStretch()
     layout.addLayout(h_lin)
 
@@ -517,6 +520,9 @@ def ask_user_options(current_slicer, current_linear, current_angular):
     except Exception:
         spin_ang.setValue(DEFAULT_ANGULAR_DEGREES)
     h_ang.addWidget(spin_ang)
+    lbl_ang_unit = QtGui.QLabel("°")
+    h_ang.addWidget(lbl_ang_unit)
+
     h_ang.addStretch()
     layout.addLayout(h_ang)
 
@@ -692,14 +698,22 @@ def detect_slicer_target_from_path(path):
 
     # # Prusa / SuperSlicer (multi-objets standard Slic3r)
 
-    if any(x in p for x in ("prusa", "super")):
+    if any(x in p for x in (
+            "prusa",
+            "super",
+            "superslicer",
+            "anycubic",
+            "flashprint",
+            "ideamaker",
+            "raise3d",
+    )):
         return "slic3r"
 
     # Cura
     if "cura" in p:
         return "cura"
 
-    return "unknown"
+    return "slic3r"
 
 
 # ------------------------------------------------------------
@@ -738,13 +752,25 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
 
         # Table de correspondance
         MAPPINGS = {
+            # Qidi family
             "qidistudio": "qidistudio",
             "qidislicer": "qidislicer",
+            "bambu": "qidistudio",  # Orca détecté comme Bambu
+            "orca": "qidistudio",  # même pipeline que QidiStudio
+            "creality": "qidistudio",  # Creality Print = Cura modifié = pipeline QidiStudio
+
+            # Prusa-like (Slic3r family)
             "prusaslicer": "slic3r",
-            "bambu": "qidistudio",  ########### en fait orca est détecté comme bambu car signature bambu
-            "orca": "qidistudio",  ########### Car même traitement que qidistudio
-            "creality": "qidistudio",  ########### Car même traitement que qidistudio
+            "superslicer": "slic3r",
+            "anycubic": "slic3r",  # Anycubic Slicer = fork Prusa
+            "flashprint": "slic3r",  # FlashPrint 5 = structure Prusa-like
+            "ideamaker": "slic3r",  # IdeaMaker = XML proche Prusa
+            "raise3d": "slic3r",  # Raise3D Slicer = IdeaMaker rebadgé
+
+            # Cura family
             "cura": "cura",
+
+            # FreeCAD
             "freecad": "freecad",
         }
 
@@ -753,11 +779,9 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
             if key in lower:
                 return value
 
-        # Sinon : retirer la version si présente
-        if "-" in txt:
-            return txt.split("-")[0]
+        # Sinon : par défaut : idem prusa
 
-        return txt
+        return "slic3r"
 
     with zipfile.ZipFile(file_path, 'r') as z:
 
@@ -1613,10 +1637,29 @@ def get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start):
     """
 
     # Récupération des objets sélectionnés ayant une Shape valide
+
+
+
+
+    """
     selection = [
         obj for obj in FreeCADGui.Selection.getSelection()
         if hasattr(obj, "Shape") and obj.Shape is not None
     ]
+    """
+
+    sel_ex = FreeCADGui.Selection.getSelectionEx()
+    selection = []
+
+    for s in sel_ex:
+        obj = s.Object
+        if hasattr(obj, "Shape"):
+            try:
+                shape = obj.Shape
+                if shape and not shape.isNull() and shape.Volume > 0:
+                    selection.append(obj)
+            except Exception:
+                pass
 
     # Aucun objet sélectionné
     if not selection:
@@ -2385,7 +2428,7 @@ def recenter_vertices_in_place(fc_3mf):
     shutil.move(tmp, fc_3mf)
 
 
-##########################NOUVEAU
+
 def recenter_model_in_3mf(fc_3mf, model_path, center_x=0, center_y=0):
     """
     Recentre un fichier .model dans un 3MF, quel que soit son chemin.
@@ -2574,7 +2617,7 @@ def export_replace_geometry():
             if DEBUG: print("Erreur lors de la copie du 3MF de base :", e)
 
     # ------------------------------------------------------------
-    # récup slice source et cible
+    # récupération de slice source et cible
     # --------------------------------------------------------------
     slicer_source = nameSlicer(fc_3mf)
     slicer_target = detect_slicer_target_from_path(slicer_path) if slicer_path else None
@@ -2624,7 +2667,7 @@ def export_replace_geometry():
         return
 
     # ------------------------------------------------------------
-    # 6) Recentrage des verices
+    # 6) Recentrage des vertices
     # ------------------------------------------------------------
 
     if slicer_target == "qidistudio":
