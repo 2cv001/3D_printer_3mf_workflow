@@ -496,7 +496,7 @@ def ask_user_options(current_slicer, current_linear, current_angular):
     except Exception:
         spin_lin.setValue(DEFAULT_LINEAR_DEFLECTION)
     h_lin.addWidget(spin_lin)
-    lbl_lin_unit = QtGui.QLabel("% bounding box")
+    lbl_lin_unit = QtGui.QLabel("mm")
     h_lin.addWidget(lbl_lin_unit)
 
     h_lin.addStretch()
@@ -510,8 +510,8 @@ def ask_user_options(current_slicer, current_linear, current_angular):
 
     spin_ang = QtGui.QDoubleSpinBox()
     spin_ang.setToolTip(tr("hint_angular"))
-    spin_ang.setRange(1.0, 90.0)
-    spin_ang.setSingleStep(1.0)
+    spin_ang.setRange(0.5, 90.0)
+    spin_ang.setSingleStep(0.5)
     spin_ang.setDecimals(1)
     spin_ang.setMaximumWidth(80)
     try:
@@ -809,7 +809,7 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
                 result['nombre_objets'] = len(meshes) if meshes else 1
 
         # ------------------------------------------------------------
-        # 2. Détecter le logiciel d'export
+        # 2. Détecter le logiciel qui a fourni la géométrie.
         # ------------------------------------------------------------
         logiciel_trouve = False
 
@@ -961,7 +961,8 @@ def export_stl_with_deflection(selection, stl_path,
             mesh = MeshPart.meshFromShape(
                 Shape=obj.Shape,
                 LinearDeflection=float(linear_deflection),
-                AngularDeflection=float(angular_deflection)
+                AngularDeflection=float(angular_deflection),
+                Relative=False
             )
             mobj = doc.addObject("Mesh::Feature", f"TempMeshSTL_{obj.Name}")
             mobj.Mesh = mesh
@@ -989,7 +990,9 @@ def export_selection_with_deflection(selection, out_3mf_path,
             mesh = MeshPart.meshFromShape(
                 Shape=obj.Shape,
                 LinearDeflection=float(linear_deflection),
-                AngularDeflection=float(angular_deflection))
+                AngularDeflection=float(angular_deflection),
+                Relative=False
+            )
             mobj = doc.addObject("Mesh::Feature", f"TempMesh_{obj.Name}")
             mobj.Mesh = mesh
             temp_objs.append(mobj)
