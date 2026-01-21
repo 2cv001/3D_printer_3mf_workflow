@@ -1688,9 +1688,9 @@ def get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start):
             shutil.move(old_3mf_backup, fc_3mf)
 
         return None
-
     # Sélection valide : un seul objet
     return selection
+
 
 
 def export_freecad_files(selection, base_name, fc_3mf, generate_stl,
@@ -1709,6 +1709,9 @@ def export_freecad_files(selection, base_name, fc_3mf, generate_stl,
         True  → export OK
         False → erreur ou restauration
     """
+    if DEBUG:
+        print('Début export_freecad_files')
+        print([obj.Name for obj in selection]) ##########################
 
     # ------------------------------------------------------------
     # Export 3MF FreeCAD
