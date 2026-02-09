@@ -8,6 +8,8 @@ INI_FILE = os.path.join(SCRIPT_DIR, "3D_Printer_3mf_Workflow.ini")
 # -------------------------
 # Traductions multilingues
 # -------------------------
+
+
 TRANSLATIONS = {
     "fr": {
         "dialog_title": "Programmes utilisateurs",
@@ -66,24 +68,11 @@ TRANSLATIONS = {
 def get_user_language():
     try:
         locale = FreeCADGui.getLocale().lower()
-        # Normalisation
-        if locale.startswith("fr") or "french" in locale:
+        if locale.startswith("fr"):
             return "fr"
-        if locale.startswith("en") or "english" in locale:
-            return "en"
-        '''
-        if locale.startswith("de") or "german" in locale:
-            return "de"
-        if locale.startswith("es") or "spanish" in locale:
-            return "es"
-        if locale.startswith("it") or "italian" in locale:
-            return "it"
-        '''    
-        # Fallback
         return "en"
-    except Exception:
+    except:
         return "en"
-
 
 def tr(key):
     lang = get_user_language()
@@ -98,17 +87,14 @@ def load_extra_commands_from_ini(path=INI_FILE):
         cfg.read(path, encoding="utf-8")
         if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
             return ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
-    except Exception as e:
-        print("⚠️ Erreur lecture EXTRA_COMMANDS ini:", e)
+    except:
+        pass
     return []
 
 def save_extra_commands_to_ini(commands, path=INI_FILE):
     cfg = configparser.ConfigParser()
     if os.path.exists(path):
-        try:
-            cfg.read(path, encoding="utf-8")
-        except Exception as e:
-            print("⚠️ Erreur lecture ini:", e)
+        cfg.read(path, encoding="utf-8")
     if "extra_commands" not in cfg:
         cfg["extra_commands"] = {}
     cfg["extra_commands"]["EXTRA_COMMANDS"] = str(commands)
@@ -121,60 +107,65 @@ def save_extra_commands_to_ini(commands, path=INI_FILE):
 def show_extra_commands_dialog():
     dialog = QtGui.QDialog()
     dialog.setWindowTitle(tr("dialog_title"))
-    dialog.setMinimumWidth(700)
+    dialog.resize(900, 500)
 
     layout = QtGui.QVBoxLayout()
 
     table = QtGui.QTableWidget()
     table.setColumnCount(4)
+    table.setWordWrap(True)
 
-    # Création des items d'en-tête avec tooltips
-    header_items = [
-        QtGui.QTableWidgetItem(tr("col_command")),
-        QtGui.QTableWidgetItem(tr("col_label")),
-        QtGui.QTableWidgetItem(tr("col_delay")),
-        QtGui.QTableWidgetItem(tr("col_default"))
-    ]
 
-    header_items[0].setToolTip(tr("hint_command"))
-    header_items[1].setToolTip(tr("hint_label"))
-    header_items[2].setToolTip(tr("hint_delay"))
-    header_items[3].setToolTip(tr("hint_default"))
 
-    for i, item in enumerate(header_items):
-        table.setHorizontalHeaderItem(i, item)
+    table.setHorizontalHeaderLabels([
+        tr("col_command"),
+        tr("col_label"),
+        tr("col_delay"),
+        tr("col_default")
+    ])
+    # Tooltips sur les en-têtes (Qt4-compatible)
+    table.horizontalHeaderItem(0).setToolTip(tr("hint_command"))
+    table.horizontalHeaderItem(1).setToolTip(tr("hint_label"))
+    table.horizontalHeaderItem(2).setToolTip(tr("hint_delay"))
+    table.horizontalHeaderItem(3).setToolTip(tr("hint_default"))
 
     header = table.horizontalHeader()
-    header.setStretchLastSection(False)
-    header.setSectionsMovable(False)
-    header.setSectionResizeMode(QtGui.QHeaderView.Interactive)
+    header.setResizeMode(0, QtGui.QHeaderView.Stretch)  # Commande = flexible
+    header.setResizeMode(1, QtGui.QHeaderView.Interactive)  # Label redimensionnable
+    header.setResizeMode(2, QtGui.QHeaderView.ResizeToContents)
+    header.setResizeMode(3, QtGui.QHeaderView.ResizeToContents)
 
-    table.setColumnWidth(0, 300)
-    table.setColumnWidth(1, 200)
-    table.setColumnWidth(2, 80)
-    table.setColumnWidth(3, 120)
+    # Permettre de redimensionner la hauteur des lignes
+    table.verticalHeader().setResizeMode(QtGui.QHeaderView.Interactive)
 
-    # Chargement des commandes existantes
     EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE)
     for cmd, label, delay, default in EXTRA_COMMANDS:
         row = table.rowCount()
         table.insertRow(row)
+
+        # Commande multi-lignes
         item_cmd = QtGui.QTableWidgetItem(" ".join(cmd))
-        item_cmd.setToolTip(tr("tooltip_cmd"))
+        item_cmd.setFlags(item_cmd.flags() | QtCore.Qt.ItemIsEditable)
         table.setItem(row, 0, item_cmd)
 
+        # Label multi-lignes
         item_label = QtGui.QTableWidgetItem(label)
-        item_label.setToolTip(tr("tooltip_label"))
+        item_label.setFlags(item_label.flags() | QtCore.Qt.ItemIsEditable)
         table.setItem(row, 1, item_label)
 
+        # Délai
         item_delay = QtGui.QTableWidgetItem(str(delay))
-        item_delay.setToolTip(tr("tooltip_delay"))
+        item_delay.setFlags(item_delay.flags() | QtCore.Qt.ItemIsEditable)
         table.setItem(row, 2, item_delay)
 
+        # Checkbox
         chk = QtGui.QCheckBox()
         chk.setChecked(default)
         table.setCellWidget(row, 3, chk)
 
+    table.resizeRowsToContents()
+    # Agrandir la colonne Label (colonne 1)
+    table.setColumnWidth(1, table.columnWidth(1) * 2)
     layout.addWidget(table)
 
     # Boutons Ajouter / Supprimer
@@ -188,12 +179,24 @@ def show_extra_commands_dialog():
     def add_row():
         row = table.rowCount()
         table.insertRow(row)
-        table.setItem(row, 0, QtGui.QTableWidgetItem(""))
-        table.setItem(row, 1, QtGui.QTableWidgetItem(tr("new_program")))
-        table.setItem(row, 2, QtGui.QTableWidgetItem("0"))
+
+        item_cmd = QtGui.QTableWidgetItem("")
+        item_cmd.setFlags(item_cmd.flags() | QtCore.Qt.ItemIsEditable)
+        table.setItem(row, 0, item_cmd)
+
+        item_label = QtGui.QTableWidgetItem(tr("new_program"))
+        item_label.setFlags(item_label.flags() | QtCore.Qt.ItemIsEditable)
+        table.setItem(row, 1, item_label)
+
+        item_delay = QtGui.QTableWidgetItem("0")
+        item_delay.setFlags(item_delay.flags() | QtCore.Qt.ItemIsEditable)
+        table.setItem(row, 2, item_delay)
+
         chk = QtGui.QCheckBox()
         chk.setChecked(False)
         table.setCellWidget(row, 3, chk)
+
+        table.resizeRowsToContents()
 
     def del_row():
         row = table.currentRow()
