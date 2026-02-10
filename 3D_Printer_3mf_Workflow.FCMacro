@@ -70,8 +70,8 @@ elif platform.system() == "Linux":
 else:
     DEFAULT_SLICER_EXE = ""
 
-DEFAULT_LINEAR_DEFLECTION = 0.01
-DEFAULT_ANGULAR_DEGREES = 2
+DEFAULT_LINEAR_DEFLECTION = 0.05
+DEFAULT_ANGULAR_DEGREES = 3
 DEFAULT_ANGULAR_DEFLECTION = DEFAULT_ANGULAR_DEGREES * math.pi / 180.0
 
 EXTRA_COMMANDS = [
@@ -591,9 +591,9 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
 
     spin_ang = QtGui.QDoubleSpinBox()
     spin_ang.setToolTip(tr("hint_angular"))
-    spin_ang.setRange(0.5, 90.0)
-    spin_ang.setSingleStep(0.5)
-    spin_ang.setDecimals(1)
+    spin_ang.setRange(0.01, 90.0)
+    spin_ang.setSingleStep(0.01)
+    spin_ang.setDecimals(2)
     spin_ang.setMaximumWidth(80)
     try:
         deg = float(current_angular) * 180.0 / math.pi
@@ -1371,11 +1371,21 @@ def find_geom_file_in_3mf(zip_path):
 def export_stl_with_deflection(selection, stl_path,
                                linear_deflection=DEFAULT_LINEAR_DEFLECTION,
                                angular_deflection=DEFAULT_ANGULAR_DEFLECTION):
-    if DEBUG: print('Export stl FreeCAD vers stl_path', os.path.basename(stl_path))
+    print('Export en stl')
     doc = FreeCAD.ActiveDocument
     temp_objs = []
     try:
         for obj in selection:
+            """
+            https://dev.opencascade.org/doc/occt-7.3.0/overview/html/occt_user_guides__modeling_algos.html#occt_modalg_11_2
+            Déviation de surface : la déviation linéaire maximale d'une section de maillage par rapport à la surface de l'objet.
+            Déviation angulaire : la déviation angulaire maximale d'une section de maillage à la suivante. Ce paramètre 
+                est utilisé lors du maillage de surfaces courbes.
+            Déviation relative de surface : si coché, la déviation linéaire maximale d'un segment de maillage sera la 
+                Déviation de surface spécifiée multipliée par la longueur du segment de maillage en cours (arête).
+                ex 0.01 passé en paramètre pour un segment de 10 mm -> 0.1 mm
+            """
+
             mesh = MeshPart.meshFromShape(
                 Shape=obj.Shape,
                 LinearDeflection=float(linear_deflection),
@@ -1400,7 +1410,7 @@ def export_stl_with_deflection(selection, stl_path,
 def export_selection_with_deflection(selection, out_3mf_path,
                                      linear_deflection=DEFAULT_LINEAR_DEFLECTION,
                                      angular_deflection=DEFAULT_ANGULAR_DEFLECTION):
-    if DEBUG: print('Export 3mf FreeCAD vers out_3mf_path', os.path.basename(out_3mf_path))
+
     print('Exportation du fichier 3mf par Freecad')
     doc = FreeCAD.ActiveDocument
     temp_objs = []
@@ -2357,7 +2367,6 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
     # CAS QIDISLICER (mono-objet)
     # ------------------------------------------------------------
     if slicer_source == "qidislicer":
-
         vertices_corrected = inject_geometry_into_qidislicer_3mf(
             old_3mf,
             tmp_new,
@@ -2888,6 +2897,7 @@ def export_replace_geometry():
 
     (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start) = env
 
+    """
     # ------------------------------------------------------------
     # Création du fichier source immuable (option 1 : diagnostic)
     # ------------------------------------------------------------
@@ -2903,7 +2913,7 @@ def export_replace_geometry():
             if DEBUG:
                 print("Impossible de créer le 3MF source immuable :", e)
 
-
+    """
     # ------------------------------------------------------------
     # 2) Vérification de la sélection
     # ------------------------------------------------------------
@@ -2989,21 +2999,25 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 9) Export FreeCAD → 3MF (dans fc_3mf, comme avant)
     # ------------------------------------------------------------
+    if DEBUGPIPE: print('Début export 3mf par FreeCAD', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     if not export_freecad_files(selection, base_name, fc_3mf, generate_stl,
                                 linear_value, angular_value,
                                 fc_3mf_existed_at_start, old_3mf_backup):
         return
+    if DEBUGPIPE: print('Fin export 3mf par FreeCAD', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
     # ------------------------------------------------------------
     # 10) Injection géométrie dans le 3MF Qidi
     # ------------------------------------------------------------
     if DEBUG:
         print("Dans export_replace_geometry : >>> Avant inject_geometry, fichier =", fc_3mf)
-
+    if DEBUGPIPE: print('Début inject_geometry', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     status, vertices_centered = inject_geometry_if_possible(
         base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start,
         slicer_path, ignore_transform
     )
+    if DEBUGPIPE: print('Fin inject_geometry', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
 
     if status == 'cancel':
         return
@@ -3094,6 +3108,7 @@ def export_replace_geometry():
     # 14) Lancement du slicer
     # ------------------------------------------------------------
     print('Lancement du slicer')
+    print('Lancement du slicer', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     launch_slicer_if_needed(slicer_path, launch_slicer, final_3mf)
 
     # ------------------------------------------------------------
