@@ -134,7 +134,7 @@ This feature is optional and can be used to automate additional steps in your wo
 A dedicated helper macro is provided to make configuration easy.
 Your commands are stored in an .ini file used by the workflow.
 
-Run the macro 3D_Printer_Workflow_ConfigIni.FCMacro
+Run the macro 3D_Printer_3mf_Workflow_ConfigIni.FCMacro
 
  • Fill in the fields in the configuration window
  
