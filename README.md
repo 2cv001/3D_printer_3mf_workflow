@@ -141,3 +141,25 @@ Run the macro 3D_Printer_3mf_Workflow_ConfigIni.FCMacro
  • Hover your mouse over a column title to display help tooltips
  
  • Each command you define will be executed in order after the 3MF file is produced.
+ 
+## Using %PROJECT%, %PROJECTDIR%, and %PROJECTNAME% in user commands
+When you define custom post‑processing commands in the workflow, you can use three special placeholders.
+These placeholders are automatically replaced by values derived from your FreeCAD project file.
+
+### Available placeholders
+Placeholder	Meaning
+%PROJECT%	Full path of the FreeCAD project without extension
+%PROJECTDIR%	Folder containing the FreeCAD project
+%PROJECTNAME%	Project file name without extension
+### Examples
+Copy the generated 3MF file next to the project :
+
+copy "%PROJECT%.3mf" "%PROJECTDIR%/backup/%PROJECTNAME%.3mf"
+
+Run a script stored in the project folder :
+
+python "%PROJECTDIR%/scripts/postprocess.py" "%PROJECT%.3mf"
+
+Send an HTTP request using the project name :
+
+curl "http://myserver/api/start?job=%PROJECTNAME%"
