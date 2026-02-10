@@ -112,3 +112,32 @@ Unlike .stl, the .3mf format supports:
     • Metadata and units 
     
     • Better geometry fidelity 
+
+
+## User Commands
+The macro allows you to define custom commands that will be executed automatically after the 3MF file is generated.
+This feature is optional and can be used to automate additional steps in your workflow, such as:
+
+ • copying the generated 3MF file to another location
+ 
+ • turning on your 3D printer through a smart plug
+ 
+ • turn a light on
+ 
+ • pre‑heating the build plate
+ 
+ • sending an HTTP request to your home automation system
+ 
+ • launching a script or external tool
+
+### How to configure user commands
+A dedicated helper macro is provided to make configuration easy.
+Your commands are stored in an .ini file used by the workflow.
+
+Run the macro 3D_Printer_Workflow_ConfigIni.FCMacro
+
+ • Fill in the fields in the configuration window
+ 
+ • Hover your mouse over a column title to display help tooltips
+ 
+ • Each command you define will be executed in order after the 3MF file is produced.
