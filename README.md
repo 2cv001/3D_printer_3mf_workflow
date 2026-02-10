@@ -114,7 +114,7 @@ Unlike .stl, the .3mf format supports:
     • Better geometry fidelity 
 
 
-## User Commands macro 3D_Printer_3mf_Workflow_ConfigIni.FCMacro
+## User Commands : macro 3D_Printer_3mf_Workflow_ConfigIni.FCMacro
 The macro allows you to define custom commands that will be executed automatically after the 3MF file is generated.
 This feature is optional and can be used to automate additional steps in your workflow, such as:
 
