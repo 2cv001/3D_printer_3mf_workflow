@@ -163,3 +163,16 @@ python "%PROJECTDIR%/scripts/postprocess.py" "%PROJECT%.3mf"
 Send an HTTP request using the project name :
 
 curl "http://myserver/api/start?job=%PROJECTNAME%"
+
+Turn on a Shelly smart plug Gen 1
+
+curl "http://192.168.xxx.xxx/relay/0?turn=on"
+
+Gen2 
+http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true
+
+Or if your device have a password :
+curl -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
+
+
+
