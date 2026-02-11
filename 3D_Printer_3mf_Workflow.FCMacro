@@ -1,44 +1,27 @@
-
-
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Macro FreeCAD multilingue : export 3MF/STL avec contrôle de tessellation,
-conservation des paramètres du slicer, ouverture automatique du slicer,
-et déclenchement de commandes externes (domotique).
-S'il y a deux objets dans le 3mf source, ne garde que le premier
+__Name__ = "Macro 3D Printer 3mf workflow"
+__Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
+__Author__ = "2cv001"
+__Title__ = "Macro 3D Printer 3mf workflow"
+__Date__ = "2026/02/1 13:45"  # YYYY/MM/DD
+__Version__ = __Date__
+__Icon__ = "https://wiki.freecad.org/images/b/b4/Macro_3D_Printer_Workflow.png"
+__Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
+__Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
+__License__ = "Apache-2.0"
 
-Variables contenant le nom des fichiers :
-fc_3mf : test.3mf si le projet est test.FCStd
-    AVANT EXPORT FREECAD
-    C'est le fichier généré par le slicer avec les paramètre impression.
-    S'il existe au lancement de la macro, fc_3mf_existed_at_start = True
-    APRES EXPORT FREECAD
-    Ecrasé par FreeCAD au moment de l'export, il contient alors la géométrie mais pas les paramètres d'impression
-
-old_3mf_backup : Ex test.old.3mf
-    Sauvegarde du fichier du slicer avant export, il contient les paramètres impression
-    Créé (copié de fc_3mf) au début de la macro si fc_3mf existe.
-
-    fc_3mf (avant export)
-        ↓ copie
-    old_3mf_backup  ← contient les paramètres d'impression si fc_3mf les a
-        ↓ export FreeCAD
-    fc_3mf (après export) ← contient la géométrie FreeCAD, pas les paramètres impression
-        ↓ injection
-    fc_3mf (final) ← géométrie FreeCAD + position Qidi
-
-tmp_new
-    fichier provisoir qui sert à construire le fichier 3mf déficnitif
-
-slicer_source
-    contient le nom du slicer source. Défini dans prepare_environment()
-slicer_target
-    contient le nom du slicer cible. Défini juste après la boite de dialogue principale
-fc_3mf_existed_at_start
-    comme son nom l'indique
-
-
-"""
+####################################################################################"
+# FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings,
+# with automatic workflow to your preferred slicer.
+# #################################################################################
+# Purpose
+# This macro automates and enhances the 3D printing workflow from FreeCAD to your slicer by:
+# • Generating smooth 3D prints without visible facets
+# • Preserving print settings (temperature, supports, speed…) directly within the FreeCAD project
+# • Launching external programs to streamline the full pipeline:
+# Use https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro
+# to add external programs 
 
 import math, os, zipfile, shutil, subprocess, re, fnmatch, xml.etree.ElementTree as ET
 import configparser, ast, platform, time
@@ -2853,21 +2836,34 @@ def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
         show_message(tr("info_title"), tr("info_done"))
 
 
-def run_extra_commands(extra_cmds):
+def run_extra_commands(extra_cmds, project_path):
     """
     Exécute les commandes externes définies par l’utilisateur.
-    Chaque entrée est un tuple : (checked, cmd, delay)
-
-    - checked : bool → exécuter ou non
-    - cmd : commande système
-    - delay : délai en secondes avant exécution
-
-    Ne retourne rien.
+    project_path = chemin complet du projet FreeCAD, AVEC extension (.FCStd)
     """
-    if DEBUG: print('Lancement commandes utilisateur')
+
+    if DEBUG:
+        print('Lancement commandes utilisateur')
+
+    # On enlève l’extension pour obtenir la base
+    project_basepath = os.path.splitext(project_path)[0]
+    # Dossier du projet
+    project_dir = os.path.dirname(project_basepath)
+    # Nom du projet sans extension
+    project_name = os.path.basename(project_basepath)
+
     for checked, cmd, delay in extra_cmds:
         if not checked:
             continue
+
+        # Substitution minimale
+        # cmd est une LISTE → on remplace dans chaque élément
+        cmd = [
+            part.replace("%PROJECT%", project_basepath)
+                .replace("%PROJECTDIR%", project_dir)
+                .replace("%PROJECTNAME%", project_name)
+            for part in cmd
+        ]
 
         try:
             if delay > 0:
@@ -3114,7 +3110,9 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 15) Commandes externes
     # ------------------------------------------------------------
-    run_extra_commands(extra_cmds)
+    doc = FreeCAD.ActiveDocument
+    project_path = doc.FileName
+    run_extra_commands(extra_cmds, project_path)
 
 
 export_replace_geometry()
