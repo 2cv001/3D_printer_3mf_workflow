@@ -24,6 +24,9 @@ This macro uses .3mf files, allowing full geometry + print configuration to be p
 To retain the core functionality of the previous macro, this version also provides an STL export option with adjustable tessellation parameters, 
 allowing smooth mesh generation just like before.
 
+# Limitation
+The current version can export only a single object, but you can work around this by using links — for example, a Simple Group — to combine multiple objects into one.
+
 # Smoothing Principle
 
 The macro exports the selected objects to a 3MF file using the specified tessellation parameters (LinearDeflection and AngularDeflection). 
