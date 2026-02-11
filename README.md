@@ -151,28 +151,38 @@ Placeholder	Meaning
 %PROJECT%	Full path of the FreeCAD project without extension
 %PROJECTDIR%	Folder containing the FreeCAD project
 %PROJECTNAME%	Project file name without extension
-### Examples
+## Examples
 Copy the generated 3MF file next to the project :
 
+```bash
 copy "%PROJECT%.3mf" "%PROJECTDIR%/backup/%PROJECTNAME%.3mf"
+```
 
 Run a script stored in the project folder :
 
+```bash
 python "%PROJECTDIR%/scripts/postprocess.py" "%PROJECT%.3mf"
+```
 
 Send an HTTP request using the project name :
 
+```bash
 curl "http://myserver/api/start?job=%PROJECTNAME%"
-
+```
 Turn on a Shelly smart plug Gen 1
 
+```bash
 curl "http://192.168.xxx.xxx/relay/0?turn=on"
+```
 
 Gen2 
+```bash
 http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true
+```
 
 Or if your device have a password :
+```bash
 curl -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
-
+```
 
 
