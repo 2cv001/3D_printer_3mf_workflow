@@ -134,10 +134,10 @@ This feature is optional and can be used to automate additional steps in your wo
  • launching a script or external tool
 
 ### How to configure user commands
-A dedicated helper macro is provided to make configuration easy.
-Your commands are stored in an .ini file used by the workflow.
 
-Run the macro 3D_Printer_3mf_Workflow_ConfigIni.FCMacro
+A dedicated helper macro is provided to make configuration easy. Your commands are stored in an .ini file used by the workflow.
+
+The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro).
 
  • Fill in the fields in the configuration window
  
