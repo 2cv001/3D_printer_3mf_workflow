@@ -1,27 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-__Name__ = "Macro_3D_Printer_3mf_workflow"
-__Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
-__Author__ = "2cv001"
-__Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/02/1 13:45"  # YYYY/MM/DD
-__Version__ = __Date__
-__Icon__ = "https://wiki.freecad.org/File:Macro_3D_Printer_3mf_Workflow.png"
-__Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
-__Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
-__License__ = "Apache-2.0"
-
-####################################################################################"
+# ===========================================================================
+# File name : 3D_Printer_3mf_workflow.FCMacro
+# ===========================================================================
 # FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings,
 # with automatic workflow to your preferred slicer.
-# #################################################################################
-# Purpose
+# 
 # This macro automates and enhances the 3D printing workflow from FreeCAD to your slicer by:
 # • Generating smooth 3D prints without visible facets
 # • Preserving print settings (temperature, supports, speed…) directly within the FreeCAD project
 # • Launching external programs to streamline the full pipeline:
 # Use https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro
 # to add external programs
+__Name__ = "3D_Printer_3mf_workflow"
+__Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
+__Author__ = "2cv001"
+__Title__ = "Macro 3D Printer 3mf workflow"
+__Date__ = "2026/02/14 16:27"  # YYYY/MM/DD
+__Version__ = __Date__
+__Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
+__Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
+__Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
+__License__ = "Apache-2.0"
 
 import math, os, zipfile, shutil, subprocess, re, fnmatch, xml.etree.ElementTree as ET
 import configparser, ast, platform, time
@@ -30,6 +30,8 @@ from PySide import QtGui, QtCore
 from typing import Dict, Optional
 import gc
 import tempfile
+import urllib.request
+
 
 
 # -------------------------
@@ -172,13 +174,22 @@ TRANSLATIONS = {
         "hint_angular": "Tolérance angulaire en degrés.\nPetite valeur = plus de détails, mais fichier plus lourd.",
         "hint_positions": "Conserve la position XY sur le plateau.\n⚠️ Le Z est toujours recalculé pour éviter que l'objet soit sous le plateau.",
         "no_external_actions": "Pas encore de commandes utilisateurs ajoutées.",
-        "hint_external_actions": "Vous pouvez ajouter vos propres actions dans le fichier ini, section [extra_commands].\n"
-                                 "Chaque commande peut être configurée avec délai et activation par case à cocher.",
+        "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
         "hint_generate_stl": "Génère aussi un fichier STL en plus du 3MF.",
         "hint_launch_slicer": "Lance automatiquement le slicer après export si le chemin est valide.",
         "ini_file_label": "Fichier ini :",
         "hint_ignore_transform": "Si coché, la position XY et la rotation du slicer ne seront pas récupérées.\n"
                                  "L'objet sera replacé droit et recentré sur le plateau.",
+
+        "dependency_missing_title": "Macro manquante",
+        "dependency_missing_msg": "La macro requise <b>{filename}</b> est manquante.",
+        "dependency_download": "Téléchargez-la ici :",
+        "dependency_copy_to": "Copiez-la ensuite dans ce dossier :",
+        "dependency_auto_download": "Télécharger automatiquement",
+        "dependency_ok": "OK",
+        "dependency_download_success": "La macro a été téléchargée dans :",
+        "dependency_download_error": "Impossible de télécharger la macro :",
+
 
     },
 
@@ -256,13 +267,23 @@ TRANSLATIONS = {
         "hint_positions": "Keeps XY position on the build plate.\n⚠️  Z is always recalculated to prevent"
                           "the object from going below the build plate.",
         "no_external_actions": "No user commands added yet.",
-        "hint_external_actions": "You can add your own actions in the ini file, section [extra_commands].\n"
-                                 "Each command can be configured with delay and checkbox activation.",
+        "hint_external_actions": "You can add or edit your custom actions by clicking the ⚙️ button.",
+
         "hint_generate_stl": "Also generates an STL file along with the 3MF.",
         "hint_launch_slicer": "Automatically launches the slicer after export if the path is valid.",
         "ini_file_label": "INI file:",
         "hint_ignore_transform": "If checked, the slicer's XY position and rotation will not be recovered.\n"
                                  "The object will be placed upright and centered on the build plate.",
+
+        "dependency_missing_title": "Missing macro",
+        "dependency_missing_msg": "The required macro <b>{filename}</b> is missing.",
+        "dependency_download": "Download it here:",
+        "dependency_copy_to": "Then copy it into this folder:",
+        "dependency_auto_download": "Download automatically",
+        "dependency_ok": "OK",
+        "dependency_download_success": "The macro has been downloaded to:",
+        "dependency_download_error": "Unable to download the macro:",
+
 
     }
 }
@@ -356,8 +377,116 @@ def load_extra_commands_from_ini(path=INI_FILE):
     except Exception as e:
         print("⚠️ Read error EXTRA_COMMANDS ini:", e)
     return []
+
+
 # Fusion au démarrage : commandes ini avant celles codées en dur
 EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE) + EXTRA_COMMANDS
+
+def run_macro_if_exists(filename, download_url, raw_url):
+    """
+    Utilise le dictionnaire global `tr` pour les libellés.
+    """
+
+    current_dir = os.path.dirname(__file__)
+    macro_path  = os.path.join(current_dir, filename)
+
+    # --- 1) Fonction interne pour exécuter la macro ---
+    def execute_macro(path):
+        with open(path, "r", encoding="utf-8") as f:
+            code = f.read()
+        exec(code, globals())
+
+    # --- 2) Si la macro existe → exécution immédiate ---
+    if os.path.isfile(macro_path):
+        execute_macro(macro_path)
+        return True
+
+    # --- 3) Sinon → fenêtre Qt personnalisée ---
+    dialog = QtGui.QDialog()
+    dialog.setWindowTitle(tr("dependency_missing_title"))
+    dialog.setMinimumWidth(520)
+
+    layout = QtGui.QVBoxLayout(dialog)
+
+    folder_url = "file:///" + current_dir.replace("\\", "/")
+
+    html = f"""
+    <p>{tr('dependency_missing_msg').format(filename=filename)}</p>
+
+    <p>{tr('dependency_download')}<br>
+    <a href="{download_url}">{download_url}</a></p>
+
+    <p>{tr('dependency_copy_to')}<br>
+    <a href="{folder_url}">{current_dir}</a></p><br>
+    """
+
+    label = QtGui.QLabel()
+    label.setTextFormat(QtCore.Qt.RichText)
+    label.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+    label.setOpenExternalLinks(False)
+    label.setText(html)
+
+    layout.addWidget(label)
+
+    # --- Bouton Télécharger automatiquement ---
+    btn_download = QtGui.QPushButton(tr("dependency_auto_download"))
+    layout.addWidget(btn_download)
+
+    # --- Bouton OK ---
+    btn_ok = QtGui.QPushButton(tr("dependency_ok"))
+    btn_ok.clicked.connect(dialog.accept)
+    layout.addWidget(btn_ok)
+
+    # --- 4) Gestion des clics sur les liens ---
+    def on_link_clicked(url):
+        if hasattr(url, "toString"):
+            url = url.toString()
+        else:
+            url = str(url)
+
+        if url.startswith("http"):
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
+            return
+
+        if url.startswith("file:///"):
+            path = url.replace("file:///", "")
+            if os.path.isdir(path):
+                if os.name == "nt":
+                    os.startfile(path)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", path])
+                else:
+                    subprocess.Popen(["xdg-open", path])
+
+    label.linkActivated.connect(on_link_clicked)
+
+    # --- 5) Téléchargement automatique + exécution ---
+    def auto_download():
+        dest = os.path.join(current_dir, filename)
+        try:
+            urllib.request.urlretrieve(raw_url, dest)
+
+            QtGui.QMessageBox.information(
+                dialog,
+                tr("info_title"),
+                f"{tr('dependency_download_success')}\n{dest}\n\n→ {tr('dependency_auto_download')}"
+            )
+
+            dialog.accept()
+            execute_macro(dest)
+
+        except Exception as e:
+            QtGui.QMessageBox.warning(
+                dialog,
+                tr("error_title"),
+                f"{tr('dependency_download_error')}\n{e}"
+            )
+
+    btn_download.clicked.connect(auto_download)
+
+    dialog.exec()
+    return False
+
 
 # Charge la configuration (slicer, déflections) depuis le fichier ini
 def load_config():
@@ -629,8 +758,9 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     extra_checks = []
     if EXTRA_COMMANDS:
         lbl_ext = QtGui.QLabel(tr("external_actions"))
-        lbl_ext.setToolTip(tr("hint_external_actions") + f"\n\n{tr('ini_file_label')} {INI_FILE}")
+        lbl_ext.setToolTip(tr("hint_external_actions") )
         layout.addWidget(lbl_ext)
+
         for cmd, label, delay, default in EXTRA_COMMANDS:
             chk = QtGui.QCheckBox(label)
             chk.setChecked(default)
@@ -639,9 +769,24 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     else:
         # 👉 Afficher un libellé même si aucune commande n'est définie
         lbl_ext = QtGui.QLabel(tr("no_external_actions"))
-        lbl_ext.setToolTip(tr("hint_external_actions") + f"\n\nFichier ini : {INI_FILE}")
+        lbl_ext.setToolTip(tr("hint_external_actions") )
         layout.addWidget(lbl_ext)
 
+    # --- Bouton "+" pour installer la macro ConfigIni ---
+    btn_add_macro = QtGui.QPushButton("⚙️")
+    btn_add_macro.setFixedWidth(30)
+    btn_add_macro.setToolTip(tr("hint_external_actions"))
+
+
+    def install_config_macro():
+        run_macro_if_exists(
+            "3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+            "https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+            "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro"
+        )
+
+    btn_add_macro.clicked.connect(install_config_macro)
+    layout.addWidget(btn_add_macro)
     # Boutons OK/Annuler
     btns = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
     layout.addWidget(btns)
@@ -735,8 +880,6 @@ def get_user_options(cfg):
         ignore_transform,
         extra_cmds
     )
-
-
 
 
 ##############################################################
@@ -1963,7 +2106,6 @@ def origin_in_3mf(path_3mf):
                 parts = matrix_str.split()
                 if len(parts) == 16:
                     matrix = list(map(float, parts))
-                    print("Matrice lue :", matrix)
                 else:
                     print("Matrice invalide :", matrix_str)
                     matrix = None
