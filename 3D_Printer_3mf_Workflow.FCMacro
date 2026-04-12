@@ -177,7 +177,7 @@ TRANSLATIONS = {
         "btn_cancel": "Annuler",
 
         # Options UI
-        "options_title": "Options d'export vers QidiStudio",
+        "options_title": "Options d'export vers Slicer",
         "keep_positions": "Conserver les positions sur le plateau",
         "generate_stl": "En plus du .3mf, générer également un STL",
         "launch_slicer": "Lancer le slicer",
@@ -271,7 +271,7 @@ TRANSLATIONS = {
         "btn_cancel": "Cancel",
 
         # UI options
-        "options_title": "Export options for QidiStudio",
+        "options_title": "Export options for Slicer",
         "generate_stl": "Also generate an STL along with the 3MF",
         "launch_slicer": "Launch slicer",
         "browse": "Browse…",
