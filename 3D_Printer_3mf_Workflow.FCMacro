@@ -24,7 +24,7 @@ __Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
 __License__ = "Apache-2.0"
 
 import math, os, zipfile, shutil, subprocess, re, fnmatch, xml.etree.ElementTree as ET
-import configparser, ast, platform, time
+import configparser, ast, platform, time, shlex
 import FreeCAD, FreeCADGui, Mesh, MeshPart
 from PySide import QtGui, QtCore
 from typing import Dict, Optional
@@ -47,6 +47,71 @@ MAX_OLD_BACKUPS = 3
 
 DEBUG = False
 DEBUGPIPE = False
+
+def is_running_in_flatpak():
+    return platform.system() == "Linux" and (
+        bool(os.environ.get("FLATPAK_ID"))
+        or os.environ.get("container") == "flatpak"
+        or os.path.exists("/.flatpak-info")
+    )
+
+def can_use_flatpak_spawn():
+    return is_running_in_flatpak() and shutil.which("flatpak-spawn") is not None
+
+def is_command_like_slicer_path(slicer_path):
+    return bool(slicer_path) and slicer_path.strip().startswith(("flatpak run", "snap run"))
+
+def split_command_line(command):
+    try:
+        return shlex.split(command.strip())
+    except Exception:
+        return None
+
+def build_slicer_launch_command(slicer_path, fc_3mf):
+    if is_command_like_slicer_path(slicer_path):
+        cmd = split_command_line(slicer_path)
+        if not cmd:
+            raise ValueError(f"Invalid slicer command: {slicer_path}")
+
+        if slicer_path.strip().startswith("flatpak run"):
+            if "--file-forwarding" not in cmd:
+                cmd = cmd[:2] + ["--file-forwarding"] + cmd[2:]
+            cmd.extend(["@@", fc_3mf, "@@"])
+        else:
+            cmd.append(fc_3mf)
+    else:
+        cmd = [slicer_path, fc_3mf]
+
+    if can_use_flatpak_spawn():
+        cmd = ["flatpak-spawn", "--host"] + cmd
+
+    return cmd
+
+def host_path_exists(path):
+    if not path or not can_use_flatpak_spawn():
+        return False
+
+    try:
+        result = subprocess.run(
+            ["flatpak-spawn", "--host", "test", "-e", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def is_valid_slicer_entry(slicer_path):
+    if not slicer_path:
+        return False
+
+    if is_command_like_slicer_path(slicer_path):
+        return split_command_line(slicer_path) is not None
+
+    if can_use_flatpak_spawn():
+        return host_path_exists(slicer_path) or os.path.exists(slicer_path)
+
+    return os.path.exists(slicer_path)
 
 if platform.system() == "Windows":
     DEFAULT_SLICER_EXE = r"C:\Program Files\QIDIStudio\qidi-studio.exe"
@@ -142,6 +207,7 @@ TRANSLATIONS = {
         "error_external_cmd": "❌ Impossible d'exécuter la commande externe :",
         "error_no_geom": "❌ Aucun fichier de géométrie détecté dans le 3MF exporté.",
         "error_invalid_slicer": "❌ Le chemin du slicer est invalide :",
+        "info_launch_command": "Commande de lancement du slicer :\n\n{command}",
         "warn_no_geom_vertices": "L'objet sélectionné n'a pas de géométrie 3D utilisable (par ex. un Sketch).",
         "warn_incompatible_slicer_dialog":
             "Le fichier 3MF d’origine provient de : {source}\n"
@@ -176,7 +242,7 @@ TRANSLATIONS = {
         "no_external_actions": "Pas encore de commandes utilisateurs ajoutées.",
         "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
         "hint_generate_stl": "Génère aussi un fichier STL en plus du 3MF.",
-        "hint_launch_slicer": "Lance automatiquement le slicer après export si le chemin est valide.",
+        "hint_launch_slicer": "Lance automatiquement le slicer après export si le chemin ou la commande est valide. Supporte les commandes comme 'flatpak run org.orcaslicer.OrcaSlicer' ou les chemins directs. Avec FreeCAD en Flatpak sous Linux, le lancement utilise flatpak-spawn vers l'hôte et active le file-forwarding pour qu'une instance deja ouverte puisse recuperer le 3MF.",
         "ini_file_label": "Fichier ini :",
         "hint_ignore_transform": "Si coché, la position XY et la rotation du slicer ne seront pas récupérées.\n"
                                  "L'objet sera replacé droit et recentré sur le plateau.",
@@ -234,6 +300,7 @@ TRANSLATIONS = {
         "error_external_cmd": "❌ Unable to execute external command:",
         "error_no_geom": "❌ No geometry file detected in exported 3MF.",
         "error_invalid_slicer": "❌ Invalid slicer path:",
+        "info_launch_command": "Slicer launch command:\n\n{command}",
         "warn_no_geom_vertices": "Selected object does not contain usable 3D geometry (e.g. a Sketch).",
         "warn_incompatible_slicer_dialog":
             "The original 3MF file was created by: {source}\n"
@@ -270,7 +337,7 @@ TRANSLATIONS = {
         "hint_external_actions": "You can add or edit your custom actions by clicking the ⚙️ button.",
 
         "hint_generate_stl": "Also generates an STL file along with the 3MF.",
-        "hint_launch_slicer": "Automatically launches the slicer after export if the path is valid.",
+        "hint_launch_slicer": "Automatically launches the slicer after export if the path or command is valid. Supports commands like 'flatpak run org.orcaslicer.OrcaSlicer' or direct paths. With FreeCAD running as a Linux Flatpak, launch uses flatpak-spawn on the host and enables file-forwarding so an already running instance can receive the 3MF.",
         "ini_file_label": "INI file:",
         "hint_ignore_transform": "If checked, the slicer's XY position and rotation will not be recovered.\n"
                                  "The object will be placed upright and centered on the build plate.",
@@ -853,9 +920,10 @@ def get_user_options(cfg):
             return None
 
         # Validation du chemin du slicer
-        if launch_slicer and slicer_path and not os.path.exists(slicer_path):
-            show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
-            continue
+        if launch_slicer and slicer_path:
+            if not is_valid_slicer_entry(slicer_path):
+                show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
+                continue
 
         # Options valides → on sort de la boucle
         break
@@ -910,6 +978,7 @@ def detect_slicer_target_from_path(path):
             "flashprint",
             "ideamaker",
             "raise3d",
+            "orca",
     )):
         #return "slic3r"
         return "qidislicer"
@@ -2749,18 +2818,23 @@ def extract_transforms_from_3mf(path_3mf: str) -> Transforms3MF:
 def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
     """
     Lance le slicer si demandé par l’utilisateur.
-    - Vérifie l’existence du chemin
+    - Vérifie l’existence du chemin ou si c'est un commande valide
     - Ouvre le slicer avec le fichier 3MF
     - Sinon affiche un message de fin
 
     Ne retourne rien.
     """
-    if DEBUGPIPE: print('Lancement du slicer', os.path.basename(slicer_path))
+    if DEBUGPIPE: print('Lancement du slicer', slicer_path)
     # Lancement demandé ?
-    if launch_slicer and slicer_path and os.path.exists(slicer_path):
+    if launch_slicer:
         try:
             time.sleep(0.2)  # petit délai pour éviter les conflits disque
-            subprocess.Popen(f'"{slicer_path}" "{fc_3mf}"', shell=True)
+            if slicer_path and is_valid_slicer_entry(slicer_path):
+                cmd = build_slicer_launch_command(slicer_path, fc_3mf)
+                subprocess.Popen(cmd)
+            elif slicer_path:
+                show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
+                return
         except Exception as e:
             show_message(tr("error_title"), f"{tr('error_launch_slicer')} {e}")
         return
@@ -3110,4 +3184,3 @@ if False:
 
     # Lancer l’analyse
     _debug_find_unused_functions(__file__)
-
