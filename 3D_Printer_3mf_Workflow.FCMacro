@@ -5,7 +5,7 @@
 # ===========================================================================
 # FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings,
 # with automatic workflow to your preferred slicer.
-# 
+#
 # This macro automates and enhances the 3D printing workflow from FreeCAD to your slicer by:
 # • Generating smooth 3D prints without visible facets
 # • Preserving print settings (temperature, supports, speed…) directly within the FreeCAD project
@@ -16,7 +16,7 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/02/14 16:27"  # YYYY/MM/DD
+__Date__ = "2026/04/17 16:27"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
 __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
@@ -43,7 +43,7 @@ global_origin_x = 0.0
 global_origin_y = 0.0
 global_origin_z = 0.0
 
-MAX_OLD_BACKUPS = 3
+MAX_OLD_BACKUPS = 2 # nb de sauvegarde
 
 DEBUG = False
 DEBUGPIPE = False
@@ -2351,222 +2351,236 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
     """
     Injection géométrique dans un fichier 3MF existant.
     """
-    if DEBUGPIPE: print('Début inject_geometry_if_possible')
+    cleaned_old_3mf = base_name + ".cleaned.3mf"
+    tmp_new = base_name + ".new.3mf"
+    try:
+        if DEBUGPIPE: print('Début inject_geometry_if_possible')
 
-    # ------------------------------------------------------------
-    # 1) Vérifier si injection possible
-    # ------------------------------------------------------------
-    is_slicer_file = os.path.exists(old_3mf_backup) and zip_contains_real_mesh(old_3mf_backup)
-    inject_possible = fc_3mf_existed_at_start and is_slicer_file
+        # ------------------------------------------------------------
+        # 1) Vérifier si injection possible
+        # ------------------------------------------------------------
+        is_slicer_file = os.path.exists(old_3mf_backup) and zip_contains_real_mesh(old_3mf_backup)
+        inject_possible = fc_3mf_existed_at_start and is_slicer_file
 
-    if not inject_possible:
-        if DEBUG: print("✅ Inject not possible. File generated exclusively by FreeCAD :", fc_3mf)
-        return "no_injection", None
+        if not inject_possible:
+            if DEBUG: print("✅ Inject not possible. File generated exclusively by FreeCAD :", fc_3mf)
+            return "no_injection", None
 
 
-    # ------------------------------------------------------------
-    # 2) Détection du slicer source
-    # ------------------------------------------------------------
-    slicer_source = nameSlicer(old_3mf_backup)
-    if DEBUG: print('slicer_source', slicer_source)
+        # ------------------------------------------------------------
+        # 2) Détection du slicer source
+        # ------------------------------------------------------------
+        slicer_source = nameSlicer(old_3mf_backup)
+        if DEBUG: print('slicer_source', slicer_source)
 
-    # ------------------------------------------------------------
-    # 3) Détection du slicer cible
-    # ------------------------------------------------------------
-    slicer_target = detect_slicer_target_from_path(slicer_path) if slicer_path else None
+        # ------------------------------------------------------------
+        # 3) Détection du slicer cible
+        # ------------------------------------------------------------
+        slicer_target = detect_slicer_target_from_path(slicer_path) if slicer_path else None
 
-    # ------------------------------------------------------------
-    # 4) Gestion des incompatibilités
-    # ------------------------------------------------------------
-    if slicer_target not in (None, "unknown") and slicer_source not in ("none", "unknown", "freecad") \
-            and slicer_source != slicer_target:
+        # ------------------------------------------------------------
+        # 4) Gestion des incompatibilités
+        # ------------------------------------------------------------
+        if slicer_target not in (None, "unknown") and slicer_source not in ("none", "unknown", "freecad") \
+                and slicer_source != slicer_target:
 
-        action = ask_incompatible_slicer_dialog(slicer_source, slicer_target)
-        if DEBUG: print("action =", action)
+            action = ask_incompatible_slicer_dialog(slicer_source, slicer_target)
+            if DEBUG: print("action =", action)
 
-        if action == "cancel":
+            if action == "cancel":
+                if os.path.exists(fc_3mf):
+                    os.remove(fc_3mf)
+                if fc_3mf_existed_at_start and os.path.exists(old_3mf_backup):
+                    shutil.move(old_3mf_backup, fc_3mf)
+                return "cancel", None
+
+            if action == "delete":
+                if DEBUG: print("🗑️ Suppression de l’ancien 3MF incompatible.")
+                try:
+                    os.remove(old_3mf_backup)
+                except Exception as e:
+                    if DEBUG: print("⚠️ Impossible de supprimer :", e)
+                inject_possible = False
+
+        if not inject_possible:
+            if DEBUG: print("⚠️ Injection impossible, export FreeCAD seul.")
+            return "no_injection", None
+
+
+        # ------------------------------------------------------------
+        # 5) Nettoyage du 3MF selon le slicer source
+        # ------------------------------------------------------------
+        # cleaned_old_3mf = base_name + ".cleaned.3mf"
+        keep_model = None
+        keep_object_id = None
+
+        if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
+            keep_object_id, keep_model = clean_multi_object_style(
+                old_3mf_backup, cleaned_old_3mf
+            )
+        else:
+            shutil.copy(old_3mf_backup, cleaned_old_3mf)
+            keep_model = "3D/Objects/object_1.model"
+
+        if slicer_source == "qidistudio" or not os.path.exists(cleaned_old_3mf):
+            old_3mf = old_3mf_backup
+        else:
+            old_3mf = cleaned_old_3mf
+
+        # ------------------------------------------------------------
+        # 6) Extraction géométrie FreeCAD
+        # ------------------------------------------------------------
+        geom_entry = find_geom_file_in_3mf(fc_3mf)
+        if not geom_entry:
+            show_message(tr("error_title"), tr("error_no_geom"))
+            return "no_injection", None
+
+
+        with zipfile.ZipFile(fc_3mf, 'r') as fc_zip:
+            geom_data = fc_zip.read(geom_entry)
+
+
+
+        # ------------------------------------------------------------
+        # 6 bis) Recentrage final pour QidiSlicer (pipeline dédié)
+        # ------------------------------------------------------------
+
+        geom_data_centered, (cx, cy, cz), vertices_centered = recenter_vertices(geom_data)
+        geom_data_centered_final = geom_data_centered
+
+        # Z est maintenant centré dans les vertices → pas de décalage à appliquer
+        decal_z = 0.0
+        decal_z_final = 0.0
+
+        # ------------------------------------------------------------
+        # 7) Reconstruction du 3MF final
+        # ------------------------------------------------------------
+        # tmp_new = base_name + ".new.3mf"
+
+        # ------------------------------------------------------------
+        # CAS QIDISLICER (mono-objet)
+        # ------------------------------------------------------------
+        if slicer_source == "qidislicer":
+            vertices_corrected = inject_geometry_into_qidislicer_3mf(
+                old_3mf,
+                tmp_new,
+                geom_data_centered_final,
+                decal_z_final,
+                ignore_transform
+            )
+
+
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
             if os.path.exists(fc_3mf):
                 os.remove(fc_3mf)
-            if fc_3mf_existed_at_start and os.path.exists(old_3mf_backup):
-                shutil.move(old_3mf_backup, fc_3mf)
-            return "cancel", None
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_corrected
 
-        if action == "delete":
-            if DEBUG: print("🗑️ Suppression de l’ancien 3MF incompatible.")
-            try:
-                os.remove(old_3mf_backup)
-            except Exception as e:
-                if DEBUG: print("⚠️ Impossible de supprimer :", e)
-            inject_possible = False
+        # ------------------------------------------------------------
+        # CAS QIDISTUDIO (multi-objets)
+        # ------------------------------------------------------------
+        if slicer_source == "qidistudio":
 
-    if not inject_possible:
-        if DEBUG: print("⚠️ Injection impossible, export FreeCAD seul.")
-        return "no_injection", None
+            with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
+                    zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
 
+                for info in old_zip.infolist():
+                    name = info.filename
+                    data = old_zip.read(name)
 
-    # ------------------------------------------------------------
-    # 5) Nettoyage du 3MF selon le slicer source
-    # ------------------------------------------------------------
-    cleaned_old_3mf = base_name + ".cleaned.3mf"
-    keep_model = None
-    keep_object_id = None
+                    # 1) Remplacement du mesh dans object_1.model
+                    if name == keep_model:
+                        merged = replace_mesh_in_model_xml(data, geom_data_centered)
 
-    if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
-        keep_object_id, keep_model = clean_multi_object_style(
-            old_3mf_backup, cleaned_old_3mf
-        )
-    else:
-        shutil.copy(old_3mf_backup, cleaned_old_3mf)
-        keep_model = "3D/Objects/object_1.model"
+                        if ignore_transform:
+                            merged = apply_common_transform_to_3dmodel(
+                                merged, geom_data_centered, ignore_transform
+                            )
+                            merged = force_zmax_in_transform(merged, decal_z)
 
-    if slicer_source == "qidistudio" or not os.path.exists(cleaned_old_3mf):
-        old_3mf = old_3mf_backup
-    else:
-        old_3mf = cleaned_old_3mf
+                        new_zip.writestr(name, merged)
+                        continue
 
-    # ------------------------------------------------------------
-    # 6) Extraction géométrie FreeCAD
-    # ------------------------------------------------------------
-    geom_entry = find_geom_file_in_3mf(fc_3mf)
-    if not geom_entry:
-        show_message(tr("error_title"), tr("error_no_geom"))
-        return "no_injection", None
+                    # 2) Transform global dans 3dmodel.model
 
+                    if name.endswith("3dmodel.model"):
 
-    with zipfile.ZipFile(fc_3mf, 'r') as fc_zip:
-        geom_data = fc_zip.read(geom_entry)
+                        if ignore_transform:
+                            merged = apply_common_transform_to_3dmodel(
+                                data, geom_data_centered, ignore_transform
+                            )
+                            merged = force_zmax_in_transform(merged, decal_z)
+                            new_zip.writestr(name, merged)
+                            continue
 
+                        # Case NON cochée → transform d’origine
+                        new_zip.writestr(name, data)
+                        continue
 
+                    # 3) Suppression des autres objets
+                    if name.startswith("3D/Objects/") and name.endswith(".model"):
+                        continue
 
-    # ------------------------------------------------------------
-    # 6 bis) Recentrage final pour QidiSlicer (pipeline dédié)
-    # ------------------------------------------------------------
+                    # 4) Recopie du reste
+                    new_zip.writestr(name, data)
 
-    geom_data_centered, (cx, cy, cz), vertices_centered = recenter_vertices(geom_data)
-    geom_data_centered_final = geom_data_centered
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
+            if os.path.exists(fc_3mf):
+                os.remove(fc_3mf)
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_centered
 
-    # Z est maintenant centré dans les vertices → pas de décalage à appliquer
-    decal_z = 0.0
-    decal_z_final = 0.0
+        # ------------------------------------------------------------
+        # CAS SLIC3R / CURA / FREECAD
+        # ------------------------------------------------------------
+        if slicer_source in ("slic3r", "freecad"):
 
-    # ------------------------------------------------------------
-    # 7) Reconstruction du 3MF final
-    # ------------------------------------------------------------
-    tmp_new = base_name + ".new.3mf"
+            with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
+                    zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
 
-    # ------------------------------------------------------------
-    # CAS QIDISLICER (mono-objet)
-    # ------------------------------------------------------------
-    if slicer_source == "qidislicer":
-        vertices_corrected = inject_geometry_into_qidislicer_3mf(
-            old_3mf,
-            tmp_new,
-            geom_data_centered_final,
-            decal_z_final,
-            ignore_transform
-        )
+                for info in old_zip.infolist():
+                    name = info.filename
+                    data = old_zip.read(name)
 
-
-        # Remplacement final
-        gc.collect()
-        time.sleep(0.05)
-        if os.path.exists(fc_3mf):
-            os.remove(fc_3mf)
-        shutil.move(tmp_new, fc_3mf)
-        if os.path.exists(old_3mf):
-            os.remove(old_3mf)
-        if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
-        return "ok", vertices_corrected
-
-    # ------------------------------------------------------------
-    # CAS QIDISTUDIO (multi-objets)
-    # ------------------------------------------------------------
-    if slicer_source == "qidistudio":
-
-        with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
-                zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
-
-            for info in old_zip.infolist():
-                name = info.filename
-                data = old_zip.read(name)
-
-                # 1) Remplacement du mesh dans object_1.model
-                if name == keep_model:
-                    merged = replace_mesh_in_model_xml(data, geom_data_centered)
-
-                    if ignore_transform:
-                        merged = apply_common_transform_to_3dmodel(
-                            merged, geom_data_centered, ignore_transform
-                        )
-                        merged = force_zmax_in_transform(merged, decal_z)
-
-                    new_zip.writestr(name, merged)
-                    continue
-
-                # 2) Transform global dans 3dmodel.model
-
-                if name.endswith("3dmodel.model"):
-
-                    if ignore_transform:
-                        merged = apply_common_transform_to_3dmodel(
-                            data, geom_data_centered, ignore_transform
-                        )
+                    if name.endswith("3dmodel.model"):
+                        merged = replace_mesh_in_model_xml(data, geom_data_centered)
                         merged = force_zmax_in_transform(merged, decal_z)
                         new_zip.writestr(name, merged)
                         continue
 
-                    # Case NON cochée → transform d’origine
                     new_zip.writestr(name, data)
-                    continue
 
-                # 3) Suppression des autres objets
-                if name.startswith("3D/Objects/") and name.endswith(".model"):
-                    continue
-
-                # 4) Recopie du reste
-                new_zip.writestr(name, data)
-
-        # Remplacement final
-        gc.collect()
-        time.sleep(0.05)
-        if os.path.exists(fc_3mf):
-            os.remove(fc_3mf)
-        shutil.move(tmp_new, fc_3mf)
-        if os.path.exists(old_3mf):
-            os.remove(old_3mf)
-        if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
-        return "ok", vertices_centered
-
-    # ------------------------------------------------------------
-    # CAS SLIC3R / CURA / FREECAD
-    # ------------------------------------------------------------
-    if slicer_source in ("slic3r", "freecad"):
-
-        with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
-                zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
-
-            for info in old_zip.infolist():
-                name = info.filename
-                data = old_zip.read(name)
-
-                if name.endswith("3dmodel.model"):
-                    merged = replace_mesh_in_model_xml(data, geom_data_centered)
-                    merged = force_zmax_in_transform(merged, decal_z)
-                    new_zip.writestr(name, merged)
-                    continue
-
-                new_zip.writestr(name, data)
-
-        # Remplacement final
-        gc.collect()
-        time.sleep(0.05)
-        if os.path.exists(fc_3mf):
-            os.remove(fc_3mf)
-        shutil.move(tmp_new, fc_3mf)
-        if os.path.exists(old_3mf):
-            os.remove(old_3mf)
-        if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
-        return "ok", vertices_centered
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
+            if os.path.exists(fc_3mf):
+                os.remove(fc_3mf)
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_centered
+    finally:
+        # Nettoyage systématique des fichiers temporaires
+        for tmp in (cleaned_old_3mf, tmp_new):
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                    if DEBUG:
+                        print("🧹 Suppression fichier temporaire :", tmp)
+            except Exception as e:
+                if DEBUG:
+                    print("⚠️ Impossible de supprimer", tmp, ":", e)
 
 def fix_item_ignore_transform(path_3mf, vertices_centered, transform_item,
                               center_xy=True, x0=None, y0=None, keep_rotation=True):
