@@ -186,7 +186,7 @@ TRANSLATIONS = {
         "angular_label": "Tolérance angulaire (AngularDeflection) (ex: 3)",
         "external_actions": "Actions externes à exécuter avant fermeture :",
         "ignore_transform": "Ne pas récupérer la position/rotation du slicer",
-        "base3mf_label": "Fichier 3MF pour paramètres impr. :",
+        "base3mf_label": "Fichier 3MF pour paramètres d'impression :",
         "base3mf_dialog_title": "Choisir un fichier 3MF pour les paramètres d'impression",
         "base3mf_filter": "Fichiers 3MF (*.3mf)",
         "select_3mf_placeholder": "Sélectionner un fichier .3mf",
@@ -239,10 +239,16 @@ TRANSLATIONS = {
                        "Exemple : 0.1 = adapté à une imprimante FDM classique.",
         "hint_angular": "Tolérance angulaire en degrés.\nPetite valeur = plus de détails, mais fichier plus lourd.",
         "hint_positions": "Conserve la position XY sur le plateau.\n⚠️ Le Z est toujours recalculé pour éviter que l'objet soit sous le plateau.",
-        "no_external_actions": "Pas encore de commandes utilisateurs ajoutées.",
+        "no_external_actions": "Pas encore de commandes utilisateur ajoutées.",
         "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
         "hint_generate_stl": "Génère aussi un fichier STL en plus du 3MF.",
-        "hint_launch_slicer": "Lance automatiquement le slicer après export si le chemin ou la commande est valide. Supporte les commandes comme 'flatpak run org.orcaslicer.OrcaSlicer' ou les chemins directs. Avec FreeCAD en Flatpak sous Linux, le lancement utilise flatpak-spawn vers l'hôte et active le file-forwarding pour qu'une instance deja ouverte puisse recuperer le 3MF.",
+        "hint_launch_slicer": (
+            "Lance automatiquement le slicer après export si le chemin ou la commande est valide. "
+            "Supporte les commandes comme 'flatpak run org.orcaslicer.OrcaSlicer' ou les chemins directs. "
+            "Avec FreeCAD en Flatpak sous Linux, le lancement utilise flatpak-spawn vers l'hôte et active "
+            "le file-forwarding pour qu'une instance déjà ouverte puisse récupérer le 3MF."
+        ),
+
         "ini_file_label": "Fichier ini :",
         "hint_ignore_transform": "Si coché, la position XY et la rotation du slicer ne seront pas récupérées.\n"
                                  "L'objet sera replacé droit et recentré sur le plateau.",
@@ -337,7 +343,13 @@ TRANSLATIONS = {
         "hint_external_actions": "You can add or edit your custom actions by clicking the ⚙️ button.",
 
         "hint_generate_stl": "Also generates an STL file along with the 3MF.",
-        "hint_launch_slicer": "Automatically launches the slicer after export if the path or command is valid. Supports commands like 'flatpak run org.orcaslicer.OrcaSlicer' or direct paths. With FreeCAD running as a Linux Flatpak, launch uses flatpak-spawn on the host and enables file-forwarding so an already running instance can receive the 3MF.",
+        "hint_launch_slicer": (
+            "Automatically launches the slicer after export if the path or command is valid. "
+            "Supports commands like 'flatpak run org.orcaslicer.OrcaSlicer' or direct paths. "
+            "With FreeCAD running as a Linux Flatpak, launch uses flatpak-spawn on the host and "
+            "enables file-forwarding so an already running instance can receive the 3MF."
+        ),
+
         "ini_file_label": "INI file:",
         "hint_ignore_transform": "If checked, the slicer's XY position and rotation will not be recovered.\n"
                                  "The object will be placed upright and centered on the build plate.",
