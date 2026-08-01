@@ -16,6 +16,3217 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
+__Date__ = "2026/08/01 21:50"  # YYYY/MM/DD
+__Version__ = __Date__
+__Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
+__Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
+__Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
+__License__ = "Apache-2.0"
+
+import math, os, zipfile, shutil, subprocess, re, fnmatch, xml.etree.ElementTree as ET
+import configparser, ast, platform, time, shlex
+import FreeCAD, FreeCADGui, Mesh, MeshPart
+from PySide import QtGui, QtCore
+from typing import Dict, Optional
+import gc
+import tempfile
+import urllib.request
+
+
+
+# -------------------------
+# Constantes et configuration
+# -------------------------
+INI_FILE = os.path.join(os.path.dirname(__file__), "3D_Printer_3mf_Workflow.ini")
+PLATEAU_X, PLATEAU_Y, PLATEAU_Z = 240, 240, 0
+global_origin_x = 0.0
+global_origin_y = 0.0
+global_origin_z = 0.0
+
+MAX_OLD_BACKUPS = 2 # nb de sauvegarde
+
+DEBUG = False
+DEBUGPIPE = False
+
+def is_running_in_flatpak():
+    return platform.system() == "Linux" and (
+        bool(os.environ.get("FLATPAK_ID"))
+        or os.environ.get("container") == "flatpak"
+        or os.path.exists("/.flatpak-info")
+    )
+
+def can_use_flatpak_spawn():
+    return is_running_in_flatpak() and shutil.which("flatpak-spawn") is not None
+
+def is_command_like_slicer_path(slicer_path):
+    return bool(slicer_path) and slicer_path.strip().startswith(("flatpak run", "snap run"))
+
+def split_command_line(command):
+    try:
+        return shlex.split(command.strip())
+    except Exception:
+        return None
+
+def build_slicer_launch_command(slicer_path, fc_3mf):
+    if is_command_like_slicer_path(slicer_path):
+        cmd = split_command_line(slicer_path)
+        if not cmd:
+            raise ValueError(f"Invalid slicer command: {slicer_path}")
+
+        if slicer_path.strip().startswith("flatpak run"):
+            if "--file-forwarding" not in cmd:
+                cmd = cmd[:2] + ["--file-forwarding"] + cmd[2:]
+            cmd.extend(["@@", fc_3mf, "@@"])
+        else:
+            cmd.append(fc_3mf)
+    else:
+        cmd = [slicer_path, fc_3mf]
+
+    if can_use_flatpak_spawn():
+        cmd = ["flatpak-spawn", "--host"] + cmd
+
+    return cmd
+
+def host_path_exists(path):
+    if not path or not can_use_flatpak_spawn():
+        return False
+
+    try:
+        result = subprocess.run(
+            ["flatpak-spawn", "--host", "test", "-e", path],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def is_valid_slicer_entry(slicer_path):
+    if not slicer_path:
+        return False
+
+    if is_command_like_slicer_path(slicer_path):
+        return split_command_line(slicer_path) is not None
+
+    if can_use_flatpak_spawn():
+        return host_path_exists(slicer_path) or os.path.exists(slicer_path)
+
+    return os.path.exists(slicer_path)
+
+if platform.system() == "Windows":
+    DEFAULT_SLICER_EXE = r"C:\Program Files\QIDIStudio\qidi-studio.exe"
+elif platform.system() == "Linux":
+    DEFAULT_SLICER_EXE = "/usr/bin/qidi-studio"
+else:
+    DEFAULT_SLICER_EXE = ""
+
+DEFAULT_LINEAR_DEFLECTION = 0.05
+DEFAULT_ANGULAR_DEGREES = 3
+DEFAULT_ANGULAR_DEFLECTION = DEFAULT_ANGULAR_DEGREES * math.pi / 180.0
+
+EXTRA_COMMANDS = [
+    # (["calc.exe"], "Ouvrir la calculatrice Windows ?", 0, False),
+    # (["curl", "-u", "admin:motDePass", "--insecure",
+    #  "http://IpDeLaPriseShelly/rpc/Switch.Set?id=0&on=true"],
+    #  "Allumer la prise Shelly Gen2 ?", 0, False),
+]
+
+
+class Transforms3MF:
+    def __init__(self):
+        self.components = []
+        self.items = []
+        self.assemble_items = []
+
+
+class Transform3MF:
+    def __init__(self, s: str):
+        vals = list(map(float, s.split()))
+
+        # Matrice de rotation 3×3
+        self.R = [
+            [vals[0], vals[3], vals[6]],
+            [vals[1], vals[4], vals[7]],
+            [vals[2], vals[5], vals[8]],
+        ]
+
+        # Translation
+        self.x = vals[9]
+        self.y = vals[10]
+        self.z = vals[11]
+
+        # Chaîne brute (utile pour réécriture)
+        self.raw = s
+
+    def __repr__(self):
+        return f"Transform3MF(x={self.x}, y={self.y}, z={self.z})"
+
+# -------------------------
+# Traductions multilingues
+# -------------------------
+TRANSLATIONS = {
+    "fr": {
+        # Titres
+        "error_title": "Erreur",
+        "warn_title": "Avertissement",
+        "info_title": "Info",
+
+        # Buttons
+        # "btn_keep": "Conserver",
+        "btn_delete": "Ok",
+        "btn_cancel": "Annuler",
+
+        # Options UI
+        "options_title": "Options d'export vers Slicer",
+        "keep_positions": "Conserver les positions sur le plateau",
+        "generate_stl": "En plus du .3mf, générer également un STL",
+        "launch_slicer": "Lancer le slicer",
+        "browse": "Parcourir…",
+        "linear_label": "Précision (LinearDeflection). Entre 0.01 et 10. Haute qualité : 0.01",
+        "angular_label": "Tolérance angulaire (AngularDeflection) (ex: 3)",
+        "external_actions": "Actions externes à exécuter avant fermeture :",
+        "ignore_transform": "Ne pas récupérer la position/rotation du slicer",
+        "base3mf_label": "Fichier 3MF pour paramètres d'impression :",
+        "base3mf_dialog_title": "Choisir un fichier 3MF pour les paramètres d'impression",
+        "base3mf_filter": "Fichiers 3MF (*.3mf)",
+        "select_3mf_placeholder": "Sélectionner un fichier .3mf",
+        "hint_base3mf": "Facultatif : permet d’utiliser les paramètres d’imprimante d’un autre fichier 3MF."
+                        "\nPar défaut, le fichier 3MF du projet est utilisé.",
+
+        # Messages d'erreur / avertissement
+        "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
+        "error_no_save": "❌ Le projet n'a pas encore été sauvegardé.",
+        "warn_no_selection": "⚠️ Aucun objet sélectionné.",
+        "warn_multi_selection": "⚠️ Sélection multiple non supportée.",
+        "error_write_ini": "❌ Écriture impossible sur le fichier ini :",
+        "error_export_3mf": "❌ Erreur lors de l'export 3MF :",
+        "error_generate_stl": "❌ Erreur lors de la génération du STL :",
+        "error_create_3mf": "❌ Erreur lors de la création du 3MF final :",
+        "error_replace_3mf": "❌ Impossible de remplacer le 3MF :",
+        "error_launch_slicer": "❌ Erreur lors du lancement du slicer :",
+        "error_external_cmd": "❌ Impossible d'exécuter la commande externe :",
+        "error_no_geom": "❌ Aucun fichier de géométrie détecté dans le 3MF exporté.",
+        "error_invalid_slicer": "❌ Le chemin du slicer est invalide :",
+        "info_launch_command": "Commande de lancement du slicer :\n\n{command}",
+        "warn_no_geom_vertices": "L'objet sélectionné n'a pas de géométrie 3D utilisable (par ex. un Sketch).",
+        "warn_incompatible_slicer_dialog":
+            "Le fichier 3MF d’origine provient de : {source}\n"
+            "Le slicer cible sélectionné est :       {target}\n\n"
+            "Ces slicers ne sont pas identiques.\n"
+            "Continuer en effaçant le fichier 3mf, sans récupération des paramètres d'impression ?",
+        "warn_empty_plate":
+            "⚠️ Le fichier 3MF du slicer ne contient aucun objet et ne peut servir de base.\n"
+            "Cela arrive souvent après une suppression dans le slicer.\n\n"
+            "Que souhaitez-vous faire ?\n\n"
+            "• Restaurer l'ancien fichier 3MF du slicer\n"
+            "• Supprimer le 3MF exporté par FreeCAD et repartir comme un nouveau projet\n"
+            "• Annuler",
+        "warn_empty_plate_title": "Plateau vide",
+        "btn_restore_old_3mf": "Restaurer l'ancien 3MF",
+        "btn_reset_new_project": "Repartir à zéro",
+
+        # Infos
+        "info_done": "✅ Export terminé. Le slicer n'a pas été lancé (option décochée).",
+        "info_export_fc": "✅ Fichier généré uniquement par FreeCAD :",
+        "info_export_slicer": "✅ Export avec récupération des paramètres du slicer :",
+        "reset_all": "Repartir de zéro (ne rien conserver)",
+        "hint_reset_all": "Supprime le fichier 3MF existant et relance la macro pour repartir d’un fichier vierge.",
+        "reset_title": "Réinitialisation",
+        "reset_message": "Le fichier 3MF existant a été supprimé.\nLa macro va redémarrer pour repartir d’un fichier vierge.",
+
+        # Aides / tooltips
+        "hint_linear": "Valeur plus petite = maillage plus fin.\nExemple : 0.01 = haute qualité, mais fichier lourd.\n"
+                       "Exemple : 0.1 = adapté à une imprimante FDM classique.",
+        "hint_angular": "Tolérance angulaire en degrés.\nPetite valeur = plus de détails, mais fichier plus lourd.",
+        "hint_positions": "Conserve la position XY sur le plateau.\n⚠️ Le Z est toujours recalculé pour éviter que l'objet soit sous le plateau.",
+        "no_external_actions": "Pas encore de commandes utilisateur ajoutées.",
+        "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
+        "hint_generate_stl": "Génère aussi un fichier STL en plus du 3MF.",
+        "hint_launch_slicer": (
+            "Lance automatiquement le slicer après export si le chemin ou la commande est valide. "
+            "Supporte les commandes comme 'flatpak run org.orcaslicer.OrcaSlicer' ou les chemins directs. "
+            "Avec FreeCAD en Flatpak sous Linux, le lancement utilise flatpak-spawn vers l'hôte et active "
+            "le file-forwarding pour qu'une instance déjà ouverte puisse récupérer le 3MF."
+        ),
+
+        "ini_file_label": "Fichier ini :",
+        "hint_ignore_transform": "Si coché, la position XY et la rotation du slicer ne seront pas récupérées.\n"
+                                 "L'objet sera replacé droit et recentré sur le plateau.",
+
+        "dependency_missing_title": "Macro manquante",
+        "dependency_missing_msg": "La macro requise <b>{filename}</b> est manquante.",
+        "dependency_download": "Téléchargez-la ici :",
+        "dependency_copy_to": "Copiez-la ensuite dans ce dossier :",
+        "dependency_auto_download": "Télécharger automatiquement",
+        "dependency_ok": "OK",
+        "dependency_download_success": "La macro a été téléchargée dans :",
+        "dependency_download_error": "Impossible de télécharger la macro :",
+
+
+    },
+
+    "en": {
+        # Titles
+        "error_title": "Error",
+        "warn_title": "Warning",
+        "info_title": "Info",
+
+        # Buttons
+        # "btn_keep": "Keep",
+        "btn_delete": "Ok",
+        "btn_cancel": "Cancel",
+
+        # UI options
+        "options_title": "Export options for Slicer",
+        "generate_stl": "Also generate an STL along with the 3MF",
+        "launch_slicer": "Launch slicer",
+        "browse": "Browse…",
+        "linear_label": "Precision (LinearDeflection). Between 0.01 and 10. High quality: 0.01",
+        "angular_label": "Angular tolerance (AngularDeflection) (e.g. 3)",
+        "external_actions": "External actions to execute before closing:",
+        "ignore_transform": "Do not recover slicer position/rotation",
+        "base3mf_label": "3MF file for print parameters:",
+        "base3mf_dialog_title": "Select a 3MF file for print parameters",
+        "base3mf_filter": "3MF files (*.3mf)",
+        "select_3mf_placeholder": "Select a .3mf file",
+        "hint_base3mf": "Optional: allows using printer parameters from another 3MF file."
+                        "\nBy default, the project’s 3MF file is used.",
+
+        # Error / warning messages
+        "error_no_doc": "❌ No document open in FreeCAD.",
+        "error_no_save": "❌ The project has not been saved yet.",
+        "warn_no_selection": "⚠️ No object selected.",
+        "warn_multi_selection": "⚠️ Multiple selection not supported.",
+        "error_write_ini": "❌ Unable to write to the ini file:",
+        "error_export_3mf": "❌ Error during 3MF export:",
+        "error_generate_stl": "❌ Error during STL generation:",
+        "error_create_3mf": "❌ Error while creating the final 3MF:",
+        "error_replace_3mf": "❌ Unable to replace the 3MF:",
+        "error_launch_slicer": "❌ Error while launching slicer:",
+        "error_external_cmd": "❌ Unable to execute external command:",
+        "error_no_geom": "❌ No geometry file detected in exported 3MF.",
+        "error_invalid_slicer": "❌ Invalid slicer path:",
+        "info_launch_command": "Slicer launch command:\n\n{command}",
+        "warn_no_geom_vertices": "Selected object does not contain usable 3D geometry (e.g. a Sketch).",
+        "warn_incompatible_slicer_dialog":
+            "The original 3MF file was created by: {source}\n"
+            "The selected target slicer is:        {target}\n\n"
+            "These slicers are not identical.\n"
+            "Continue by deleting the 3MF file, without recovering the print settings?\n\n",
+        "warn_empty_plate":
+            "⚠️ The slicer's 3MF file contains no objects and cannot be used as a base.\n"
+            "This often happens after deleting objects inside the slicer.\n\n"
+            "What would you like to do?\n\n"
+            "• Restore the previous 3MF file from the slicer\n"
+            "• Delete the 3MF exported by FreeCAD and start a new project\n"
+            "• Cancel",
+        "warn_empty_plate_title": "Empty build plate",
+        "btn_restore_old_3mf": "Restore previous 3MF",
+        "btn_reset_new_project": "Start a new project",
+
+        # Infos
+        "info_done": "✅ Export finished. Slicer was not launched (option unchecked).",
+        "info_export_fc": "✅ File generated only by FreeCAD:",
+        "info_export_slicer": "✅ Export with slicer settings recovered:",
+        "reset_all": "Start from scratch (discard everything)",
+        "hint_reset_all": "Deletes the existing 3MF file and restarts the macro with a fresh empty project.",
+        "reset_title": "Reset",
+        "reset_message": "The existing 3MF file has been deleted.\nThe macro will restart with a fresh empty project.",
+
+        # Tooltips
+        "hint_linear": "Smaller value = finer mesh.\nExample: 0.01 = high quality but heavy file.\n"
+                       "Example: 0.1 = suitable for standard FDM printer.",
+        "hint_angular": "Angular tolerance in degrees.\nSmaller value = more detail, but heavier file.",
+        "hint_positions": "Keeps XY position on the build plate.\n⚠️  Z is always recalculated to prevent"
+                          "the object from going below the build plate.",
+        "no_external_actions": "No user commands added yet.",
+        "hint_external_actions": "You can add or edit your custom actions by clicking the ⚙️ button.",
+
+        "hint_generate_stl": "Also generates an STL file along with the 3MF.",
+        "hint_launch_slicer": (
+            "Automatically launches the slicer after export if the path or command is valid. "
+            "Supports commands like 'flatpak run org.orcaslicer.OrcaSlicer' or direct paths. "
+            "With FreeCAD running as a Linux Flatpak, launch uses flatpak-spawn on the host and "
+            "enables file-forwarding so an already running instance can receive the 3MF."
+        ),
+
+        "ini_file_label": "INI file:",
+        "hint_ignore_transform": "If checked, the slicer's XY position and rotation will not be recovered.\n"
+                                 "The object will be placed upright and centered on the build plate.",
+
+        "dependency_missing_title": "Missing macro",
+        "dependency_missing_msg": "The required macro <b>{filename}</b> is missing.",
+        "dependency_download": "Download it here:",
+        "dependency_copy_to": "Then copy it into this folder:",
+        "dependency_auto_download": "Download automatically",
+        "dependency_ok": "OK",
+        "dependency_download_success": "The macro has been downloaded to:",
+        "dependency_download_error": "Unable to download the macro:",
+
+
+    }
+}
+
+# Détermine la langue de l’utilisateur à partir de FreeCADGui
+def get_user_language():
+    try:
+        locale = FreeCADGui.getLocale().lower()
+        # Normalisation
+        if locale.startswith("fr") or "french" in locale:
+            return "fr"
+        if locale.startswith("en") or "english" in locale:
+            return "en"
+        '''
+        if locale.startswith("de") or "german" in locale:
+            return "de"
+        if locale.startswith("es") or "spanish" in locale:
+            return "es"
+        if locale.startswith("it") or "italian" in locale:
+            return "it"
+        '''
+        # Fallback
+        return "en"
+    except Exception:
+        return "en"
+
+# Traduit une clé donnée selon la langue utilisateur
+def tr(key):
+    lang = get_user_language()
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+
+
+
+##############################################################
+# Fonctions utilitaires
+##############################################################
+# Affiche une boîte de message d’information dans FreeCAD
+def show_message(title, message):
+    QtGui.QMessageBox.information(None, title, message)
+
+# -------------------------
+# Rotation des sauvegardes
+# -------------------------
+def rotate_old_backups(base_name, max_backups):
+    """
+    Sauvegarde le fichier base_name.3mf sous la forme :
+        base_name.old.YYYY-MM-DD-HH-MM-SS.3mf
+
+    Et conserve uniquement les max_backups fichiers les plus récents.
+    """
+    fc_3mf = base_name + ".3mf"
+    if not os.path.exists(fc_3mf):
+        return
+
+    # 1) Créer un backup daté
+    timestamp = time.strftime("%Y-%m-%d-%H-%M-%S")
+    backup_path = f"{base_name}.old.{timestamp}.3mf"
+    shutil.copy(fc_3mf, backup_path)
+
+    # 2) Lister tous les backups datés
+    dir_name = os.path.dirname(base_name) or "."
+    prefix = os.path.basename(base_name) + ".old."
+    suffix = ".3mf"
+
+    backups = []
+    for fname in os.listdir(dir_name):
+        if fname.startswith(prefix) and fname.endswith(suffix):
+            full = os.path.join(dir_name, fname)
+            backups.append(full)
+
+    # 3) Trier par date de modification (du plus récent au plus ancien)
+    backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+
+    # 4) Supprimer les plus anciens au-delà de max_backups
+    for old in backups[max_backups:]:
+        if DEBUG:
+            print("Suppression ancien backup :", os.path.basename(old))
+        os.remove(old)
+
+
+##############################################################
+# Fonctions options utilisateurs
+##############################################################
+# Charge les commandes externes définies dans le fichier ini
+def load_extra_commands_from_ini(path=INI_FILE):
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(path, encoding="utf-8")
+        if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
+            return ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
+    except Exception as e:
+        print("⚠️ Read error EXTRA_COMMANDS ini:", e)
+    return []
+
+
+# Fusion au démarrage : commandes ini avant celles codées en dur
+EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE) + EXTRA_COMMANDS
+
+def run_macro_if_exists(filename, download_url, raw_url):
+    """
+    Utilise le dictionnaire global `tr` pour les libellés.
+    """
+
+    current_dir = os.path.dirname(__file__)
+    macro_path  = os.path.join(current_dir, filename)
+
+    # --- 1) Fonction interne pour exécuter la macro ---
+    def execute_macro(path):
+        with open(path, "r", encoding="utf-8") as f:
+            code = f.read()
+        exec(code, globals())
+
+    # --- 2) Si la macro existe → exécution immédiate ---
+    if os.path.isfile(macro_path):
+        execute_macro(macro_path)
+        return True
+
+    # --- 3) Sinon → fenêtre Qt personnalisée ---
+    dialog = QtGui.QDialog()
+    dialog.setWindowTitle(tr("dependency_missing_title"))
+    dialog.setMinimumWidth(520)
+
+    layout = QtGui.QVBoxLayout(dialog)
+
+    folder_url = "file:///" + current_dir.replace("\\", "/")
+
+    html = f"""
+    <p>{tr('dependency_missing_msg').format(filename=filename)}</p>
+
+    <p>{tr('dependency_download')}<br>
+    <a href="{download_url}">{download_url}</a></p>
+
+    <p>{tr('dependency_copy_to')}<br>
+    <a href="{folder_url}">{current_dir}</a></p><br>
+    """
+
+    label = QtGui.QLabel()
+    label.setTextFormat(QtCore.Qt.RichText)
+    label.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
+    label.setOpenExternalLinks(False)
+    label.setText(html)
+
+    layout.addWidget(label)
+
+    # --- Bouton Télécharger automatiquement ---
+    btn_download = QtGui.QPushButton(tr("dependency_auto_download"))
+    layout.addWidget(btn_download)
+
+    # --- Bouton OK ---
+    btn_ok = QtGui.QPushButton(tr("dependency_ok"))
+    btn_ok.clicked.connect(dialog.accept)
+    layout.addWidget(btn_ok)
+
+    # --- 4) Gestion des clics sur les liens ---
+    def on_link_clicked(url):
+        if hasattr(url, "toString"):
+            url = url.toString()
+        else:
+            url = str(url)
+
+        if url.startswith("http"):
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl(url))
+            return
+
+        if url.startswith("file:///"):
+            path = url.replace("file:///", "")
+            if os.path.isdir(path):
+                if os.name == "nt":
+                    os.startfile(path)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", path])
+                else:
+                    subprocess.Popen(["xdg-open", path])
+
+    label.linkActivated.connect(on_link_clicked)
+
+    # --- 5) Téléchargement automatique + exécution ---
+    def auto_download():
+        dest = os.path.join(current_dir, filename)
+        try:
+            urllib.request.urlretrieve(raw_url, dest)
+
+            QtGui.QMessageBox.information(
+                dialog,
+                tr("info_title"),
+                f"{tr('dependency_download_success')}\n{dest}\n\n→ {tr('dependency_auto_download')}"
+            )
+
+            dialog.accept()
+            execute_macro(dest)
+
+        except Exception as e:
+            QtGui.QMessageBox.warning(
+                dialog,
+                tr("error_title"),
+                f"{tr('dependency_download_error')}\n{e}"
+            )
+
+    btn_download.clicked.connect(auto_download)
+
+    dialog.exec()
+    return False
+
+
+# Charge la configuration (slicer, déflections) depuis le fichier ini
+def load_config():
+    cfg = {
+        "slicer_exe": DEFAULT_SLICER_EXE,
+        "linear_deflection": DEFAULT_LINEAR_DEFLECTION,
+        "angular_deflection": DEFAULT_ANGULAR_DEFLECTION,
+        "ignore_transform": True,  # valeur par défaut
+    }
+    config = configparser.ConfigParser()
+    if os.path.exists(INI_FILE):
+        try:
+            config.read(INI_FILE)
+            if "Settings" in config:
+                s = config["Settings"]
+                if "slicer_exe" in s:
+                    cfg["slicer_exe"] = s.get("slicer_exe", cfg["slicer_exe"])
+                if "linear_deflection" in s:
+                    cfg["linear_deflection"] = float(s.get("linear_deflection", cfg["linear_deflection"]))
+                if "angular_deflection_deg" in s:
+                    deg = float(s.get("angular_deflection_deg", DEFAULT_ANGULAR_DEGREES))
+                    cfg["angular_deflection"] = deg * math.pi / 180.0
+                if "ignore_transform" in s:
+                    cfg["ignore_transform"] = s.getboolean("ignore_transform", True)
+        except Exception as e:
+            print("⚠️ Erreur lecture ini:", e)
+    return cfg
+
+# Sauvegarde les paramètres (déflections, chemin slicer) dans le fichier ini
+def save_settings(linear, angular_rad, slicer_path, ignore_transform):
+    angular_deg = None
+    if angular_rad is not None:
+        angular_deg = angular_rad * 180.0 / math.pi
+
+    # Création initiale si le fichier n'existe pas
+    if not os.path.exists(INI_FILE):
+        with open(INI_FILE, "w", encoding="utf-8") as f:
+            f.write(
+                "[Settings]\n"
+                f"linear_deflection = {linear}\n"
+                f"angular_deflection_deg = {angular_deg}\n"
+                f"ignore_transform = {str(ignore_transform).lower()}\n"
+                f"slicer_exe = {slicer_path}\n\n"
+                "[extra_commands]\n"
+                "EXTRA_COMMANDS = [\n"
+                "    ]\n"
+            )
+        return
+
+    # Mise à jour ciblée si le fichier existe
+    with open(INI_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    new_lines = []
+    in_settings = False
+
+    # Flags pour savoir si les clés existaient
+    found_linear = False
+    found_angular = False
+    found_slicer = False
+    found_ignore = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.startswith("[Settings]"):
+            in_settings = True
+            new_lines.append(line)
+            continue
+
+        if in_settings and stripped.startswith("[") and not stripped.startswith("[Settings]"):
+            in_settings = False
+
+        if in_settings:
+            if stripped.startswith("linear_deflection"):
+                new_lines.append(f"linear_deflection = {linear}\n")
+                found_linear = True
+                continue
+
+            if stripped.startswith("angular_deflection_deg"):
+                new_lines.append(f"angular_deflection_deg = {angular_deg}\n")
+                found_angular = True
+                continue
+
+            if stripped.startswith("slicer_exe"):
+                new_lines.append(f"slicer_exe = {slicer_path}\n")
+                found_slicer = True
+                continue
+
+            if stripped.startswith("ignore_transform"):
+                new_lines.append(f"ignore_transform = {str(ignore_transform).lower()}\n")
+                found_ignore = True
+                continue
+
+        new_lines.append(line)
+
+    # Ajout des clés manquantes juste après [Settings]
+    for i, line in enumerate(new_lines):
+        if line.strip().startswith("[Settings]"):
+            insert_index = i + 1
+            break
+
+    if not found_linear:
+        new_lines.insert(insert_index, f"linear_deflection = {linear}\n")
+        insert_index += 1
+
+    if not found_angular:
+        new_lines.insert(insert_index, f"angular_deflection_deg = {angular_deg}\n")
+        insert_index += 1
+
+    if not found_ignore:
+        new_lines.insert(insert_index, f"ignore_transform = {str(ignore_transform).lower()}\n")
+        insert_index += 1
+
+    if not found_slicer:
+        new_lines.insert(insert_index, f"slicer_exe = {slicer_path}\n")
+        insert_index += 1
+
+    with open(INI_FILE, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+
+# Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
+def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref):
+    """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
+    dialog = QtGui.QDialog()
+    dialog.setWindowTitle(tr("options_title"))
+    dialog.setMinimumWidth(720)
+
+    layout = QtGui.QVBoxLayout()
+
+    # Cases principales
+    chk_stl = QtGui.QCheckBox(tr("generate_stl"))
+    chk_stl.setToolTip(tr("hint_generate_stl"))
+    chk_stl.setChecked(False)
+
+    # Nouvelle case : repartir de zéro
+    chk_reset = QtGui.QCheckBox(tr("reset_all"))
+    chk_reset.setToolTip(tr("hint_reset_all"))
+    chk_reset.setChecked(False)
+    layout.addWidget(chk_reset)
+    layout.addWidget(chk_stl)
+
+    # Nouvelle case : ignorer la position/rotation du slicer
+    chk_ignore_transform = QtGui.QCheckBox(tr("ignore_transform"))
+    chk_ignore_transform.setToolTip(tr("hint_ignore_transform"))
+
+    chk_ignore_transform.setChecked(ignore_transform_pref)
+    layout.addWidget(chk_ignore_transform)
+
+    # Ligne combinée : case "Lancer le slicer" + champ chemin
+    h_slicer = QtGui.QHBoxLayout()
+    chk_launch = QtGui.QCheckBox(tr("launch_slicer"))
+    chk_launch.setFixedWidth(250)  # largeur colonne gauche
+
+    chk_launch.setToolTip(tr("hint_launch_slicer"))
+    chk_launch.setChecked(True)
+    h_slicer.addWidget(chk_launch)
+
+    edit_slicer = QtGui.QLineEdit(current_slicer or "")
+    edit_slicer.setMinimumWidth(420)
+    h_slicer.addWidget(edit_slicer, stretch=1)
+
+    btn_browse = QtGui.QPushButton(tr("browse"))
+
+    def browse():
+        path, _ = QtGui.QFileDialog.getOpenFileName(dialog, tr("browse"))
+        if path:
+            edit_slicer.setText(path)
+
+    btn_browse.clicked.connect(browse)
+    h_slicer.addWidget(btn_browse)
+    layout.addLayout(h_slicer)
+
+    # ------------------------------------------------------------
+    # Calcul du fichier 3MF par défaut
+    # ------------------------------------------------------------
+    doc = FreeCAD.ActiveDocument
+    if doc and doc.FileName:
+        fcstd_path = doc.FileName
+        default_fc_3mf = os.path.splitext(fcstd_path)[0] + ".3mf"
+    else:
+        default_fc_3mf = "select file .3mf"
+
+    # ------------------------------------------------------------
+    # Ligne "Fichier 3MF de base" alignée EXACTEMENT comme la ligne EXE
+    # ------------------------------------------------------------
+    h_base3mf = QtGui.QHBoxLayout()
+
+    lbl_base3mf = QtGui.QLabel(tr("base3mf_label"))
+    lbl_base3mf.setFixedWidth(chk_launch.width())
+    lbl_base3mf.setToolTip(tr("hint_base3mf"))
+
+    h_base3mf.addWidget(lbl_base3mf)
+
+    edit_base3mf = QtGui.QLineEdit(default_fc_3mf)
+    edit_base3mf.setToolTip(tr("hint_base3mf"))
+
+    edit_base3mf.setMinimumWidth(420)
+    h_base3mf.addWidget(edit_base3mf, stretch=1)
+    btn_base3mf = QtGui.QPushButton(tr("browse"))
+
+    def browse_base3mf():
+        fcstd_dir = os.path.dirname(FreeCAD.ActiveDocument.FileName) \
+            if FreeCAD.ActiveDocument and FreeCAD.ActiveDocument.FileName else ""
+
+        path, _ = QtGui.QFileDialog.getOpenFileName(
+            dialog,
+            tr("base3mf_dialog_title"),
+            fcstd_dir,
+            tr("base3mf_filter")
+        )
+
+        if path:
+            edit_base3mf.setText(path)
+
+    btn_base3mf.clicked.connect(browse_base3mf)
+    h_base3mf.addWidget(btn_base3mf)
+
+    layout.addLayout(h_base3mf)
+
+    # Précision linéaire
+    h_lin = QtGui.QHBoxLayout()
+    lbl_lin = QtGui.QLabel(tr("linear_label"))
+    lbl_lin.setMinimumWidth(420)
+    h_lin.addWidget(lbl_lin)
+
+    spin_lin = QtGui.QDoubleSpinBox()
+    spin_lin.setToolTip(tr("hint_linear"))
+    spin_lin.setRange(0.01, 10.0)
+    spin_lin.setSingleStep(0.01)
+    spin_lin.setDecimals(2)
+    spin_lin.setMaximumWidth(80)
+    try:
+        spin_lin.setValue(round(float(current_linear), 2))
+    except Exception:
+        spin_lin.setValue(DEFAULT_LINEAR_DEFLECTION)
+    h_lin.addWidget(spin_lin)
+    lbl_lin_unit = QtGui.QLabel("mm")
+    h_lin.addWidget(lbl_lin_unit)
+
+    h_lin.addStretch()
+    layout.addLayout(h_lin)
+
+    # Tolérance angulaire
+    h_ang = QtGui.QHBoxLayout()
+    lbl_ang = QtGui.QLabel(tr("angular_label"))
+    lbl_ang.setMinimumWidth(420)
+    h_ang.addWidget(lbl_ang)
+
+    spin_ang = QtGui.QDoubleSpinBox()
+    spin_ang.setToolTip(tr("hint_angular"))
+    spin_ang.setRange(0.01, 90.0)
+    spin_ang.setSingleStep(0.01)
+    spin_ang.setDecimals(2)
+    spin_ang.setMaximumWidth(80)
+    try:
+        deg = float(current_angular) * 180.0 / math.pi
+        spin_ang.setValue(deg)
+    except Exception:
+        spin_ang.setValue(DEFAULT_ANGULAR_DEGREES)
+    h_ang.addWidget(spin_ang)
+    lbl_ang_unit = QtGui.QLabel("°")
+    h_ang.addWidget(lbl_ang_unit)
+
+    h_ang.addStretch()
+    layout.addLayout(h_ang)
+
+    # Cases pour les commandes externes
+    extra_checks = []
+    if EXTRA_COMMANDS:
+        lbl_ext = QtGui.QLabel(tr("external_actions"))
+        lbl_ext.setToolTip(tr("hint_external_actions") )
+        layout.addWidget(lbl_ext)
+
+        for cmd, label, delay, default in EXTRA_COMMANDS:
+            chk = QtGui.QCheckBox(label)
+            chk.setChecked(default)
+            layout.addWidget(chk)
+            extra_checks.append((chk, cmd, delay))
+    else:
+        # 👉 Afficher un libellé même si aucune commande n'est définie
+        lbl_ext = QtGui.QLabel(tr("no_external_actions"))
+        lbl_ext.setToolTip(tr("hint_external_actions") )
+        layout.addWidget(lbl_ext)
+
+    # --- Bouton "+" pour installer la macro ConfigIni ---
+    btn_add_macro = QtGui.QPushButton("⚙️")
+    btn_add_macro.setFixedWidth(30)
+    btn_add_macro.setToolTip(tr("hint_external_actions"))
+
+
+    def install_config_macro():
+        run_macro_if_exists(
+            "3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+            "https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+            "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro"
+        )
+
+    btn_add_macro.clicked.connect(install_config_macro)
+    layout.addWidget(btn_add_macro)
+    # Boutons OK/Annuler
+    btns = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+    layout.addWidget(btns)
+    dialog.setLayout(layout)
+
+    btns.accepted.connect(dialog.accept)
+    btns.rejected.connect(dialog.reject)
+
+    if dialog.exec() == QtGui.QDialog.Accepted:
+        linear_val = float(spin_lin.value())
+        angular_deg = float(spin_ang.value())
+        angular_rad = angular_deg * math.pi / 180.0
+        return (
+            chk_stl.isChecked(),
+            edit_slicer.text(),
+            edit_base3mf.text(),
+            chk_launch.isChecked(),
+            linear_val,
+            angular_rad,
+            chk_reset.isChecked(),
+            chk_ignore_transform.isChecked(),
+            [(chk.isChecked(), cmd, delay) for chk, cmd, delay in extra_checks],
+        )
+
+
+    else:
+        return (None, None, None, None, None, None, None, None, [])
+
+def get_user_options(cfg):
+    """
+    Affiche la boîte de dialogue utilisateur :
+    - paramètres FreeCAD
+    - positions
+    - STL
+    - slicer
+    - commandes externes
+
+    Gère :
+    - annulation
+    - validation du chemin du slicer
+    - sauvegarde des préférences
+
+
+    """
+
+    # Préférences actuelles
+    slicer_path_pref = cfg.get("slicer_exe", DEFAULT_SLICER_EXE)
+    linear_pref = cfg.get("linear_deflection", DEFAULT_LINEAR_DEFLECTION)
+    angular_pref = cfg.get("angular_deflection", DEFAULT_ANGULAR_DEFLECTION)
+    ignore_transform_pref = cfg.get("ignore_transform", True)
+
+    while True:
+        # Appel de la boîte de dialogue utilisateur
+        (generate_stl,
+         slicer_path, base3mf_path, launch_slicer,
+         linear_value, angular_value, reset_all,
+         ignore_transform, extra_cmds) = ask_user_options(
+            slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref
+        )
+
+        # Annulation
+        if slicer_path is None and launch_slicer is None:
+            # show_message(tr("info_title"), tr("info_cancel"))
+            return None
+
+        # Validation du chemin du slicer
+        if launch_slicer and slicer_path:
+            if not is_valid_slicer_entry(slicer_path):
+                show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
+                continue
+
+        # Options valides → on sort de la boucle
+        break
+
+    # Sauvegarde des préférences
+    save_settings(
+        linear=linear_value,
+        angular_rad=angular_value,
+        slicer_path=slicer_path,
+        ignore_transform = ignore_transform
+
+    )
+
+    return (
+        generate_stl,
+        slicer_path,
+        base3mf_path,
+        launch_slicer,
+        linear_value,
+        angular_value,
+        reset_all,
+        ignore_transform,
+        extra_cmds
+    )
+
+
+##############################################################
+# Fonctions analyse extraction 3MF
+##############################################################
+
+def detect_slicer_target_from_path(path):
+    if not path:
+        return None
+
+    p = path.lower()
+
+    # QidiSlicer (mono-objet)
+    if "qidislicer" in p:
+        return "qidislicer"
+
+    # QidiStudio family (multi-objets Qidi-compatible)
+    if any(x in p for x in ("qidistudio", "orca", "bambu", "creality")):
+        return "qidistudio"
+
+    # # Prusa / SuperSlicer (multi-objets standard Slic3r)
+
+    if any(x in p for x in (
+            "prusa",
+            "super",
+            "superslicer",
+            "anycubic",
+            "flashprint",
+            "ideamaker",
+            "raise3d",
+            "orca",
+    )):
+        #return "slic3r"
+        return "qidislicer"
+
+    # Cura
+    if "cura" in p:
+        #return "cura"
+        return "qidislicer"
+
+    # return "slic3r"
+    return "qidislicer"
+
+def build_model_xml(vertices, triangles):
+    """
+    Construit un XML 3MF minimal pour 3D/3dmodel.model
+    sans aucun namespace (version texte brut).
+    """
+    if DEBUGPIPE: print('début build_model_xml---------------------------------')
+    # --- Construction du bloc <vertices> ---
+    verts_xml = []
+    for (x, y, z) in vertices:
+        verts_xml.append(f'<vertex x="{x}" y="{y}" z="{z}"/>')
+    verts_block = "\n".join(verts_xml)
+
+    # --- Construction du bloc <triangles> ---
+    tris_xml = []
+    for (v1, v2, v3) in triangles:
+        tris_xml.append(f'<triangle v1="{v1}" v2="{v2}" v3="{v3}"/>')
+    tris_block = "\n".join(tris_xml)
+
+    # --- Construction complète du fichier ---
+    xml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<model unit="millimeter" xml:lang="en-US">
+  <resources>
+    <object id="1" type="model">
+      <mesh>
+        <vertices>
+{verts_block}
+        </vertices>
+        <triangles>
+{tris_block}
+        </triangles>
+      </mesh>
+    </object>
+  </resources>
+  <build>
+    <item objectid="1" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>
+  </build>
+</model>
+'''
+
+    return xml.encode("utf-8")
+
+def extract_transforms_from_3mf(path_3mf: str) -> Transforms3MF:
+    tr = Transforms3MF()
+
+    with zipfile.ZipFile(path_3mf, 'r') as z:
+
+        # 1) Lecture du fichier principal 3D/3dmodel.model
+        with z.open('3D/3dmodel.model') as f:
+
+            tree = ET.parse(f)
+            root = tree.getroot()
+
+            # <component>
+            for comp in root.findall('.//{*}component'):
+                t = comp.get("transform")
+                if t is None or t.strip() == "":
+                    tr.components.append(None)
+                else:
+                    tr.components.append(Transform3MF(t))
+
+            # <item>
+            for item in root.findall('.//{*}item'):
+                t = item.get("transform")
+                if t is None or t.strip() == "":
+                    tr.items.append(None)
+
+                else:
+                    tr.items.append(Transform3MF(t))
+
+        # 2) Lecture de Metadata/model_settings.config (pas de namespace)
+        if 'Metadata/model_settings.config' in z.namelist():
+            with z.open('Metadata/model_settings.config') as f:
+                tree2 = ET.parse(f)
+                root2 = tree2.getroot()
+
+                for a in root2.findall('.//assemble_item'):
+                    t = a.get('transform')
+                    if t is None or t.strip() == "":
+                        tr.assemble_items.append(None)
+
+                    else:
+                        tr.assemble_items.append(Transform3MF(t))
+
+    return tr
+
+def extract_vertices_from_3mf(path_3mf: str):
+    """
+    Extrait tous les vertices du mesh dans 3D/3dmodel.model.
+    Retourne une liste de tuples (x, y, z).
+    """
+
+    try:
+        with zipfile.ZipFile(path_3mf, 'r') as z:
+            xml = z.read("3D/3dmodel.model").decode("utf-8")
+    except Exception:
+        return []
+
+    # Cherche les vertices dans <vertex x="..." y="..." z="..."/>
+    pattern = r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"'
+    matches = re.findall(pattern, xml)
+
+    vertices = []
+    for x, y, z in matches:
+        try:
+            vertices.append((float(x), float(y), float(z)))
+        except Exception:
+            pass
+
+    return vertices
+
+def compute_Zmin_global(path_3mf: str, tr: Transforms3MF) -> float:
+    vertices = extract_vertices_from_3mf(path_3mf)
+    if not vertices:
+        return 0.0
+
+    Zs = []
+    for t in tr.items:
+        vals = list(map(float, t.raw.split()))
+        R = [
+            [vals[0], vals[3], vals[6]],
+            [vals[1], vals[4], vals[7]],
+            [vals[2], vals[5], vals[8]],
+        ]
+        Tz = vals[11]
+
+        for (x, y, z) in vertices:
+            zr = R[2][0]*x + R[2][1]*y + R[2][2]*z + Tz
+            Zs.append(zr)
+
+    return min(Zs)
+
+def copy_all_transforms(xml: str, tr: Transforms3MF) -> str:
+
+    # <component>
+    def repl_component(match):
+        repl_component.i += 1
+        t = tr.components[repl_component.i - 1]
+        t_raw = t.raw if t is not None else ""
+        return f'{match.group(1)}{t_raw}{match.group(3)}'
+
+    repl_component.i = 0
+    xml = re.sub(r'(<component[^>]*transform=")([^"]+)(")', repl_component, xml)
+
+    # <item>
+    def repl_item(match):
+        repl_item.i += 1
+        t = tr.items[repl_item.i - 1]
+        t_raw = t.raw if t is not None else ""
+        return f'{match.group(1)}{t_raw}{match.group(3)}'
+
+    repl_item.i = 0
+    xml = re.sub(r'(<item[^>]*transform=")([^"]+)(")', repl_item, xml)
+
+    # <assemble_item>
+    def repl_assemble(match):
+        repl_assemble.i += 1
+        t = tr.assemble_items[repl_assemble.i - 1]
+        t_raw = t.raw if t is not None else ""
+        return f'{match.group(1)}{t_raw}{match.group(3)}'
+
+    repl_assemble.i = 0
+    xml = re.sub(r'(<assemble_item[^>]*transform=")([^"]+)(")', repl_assemble, xml)
+
+    return xml
+
+def apply_saved_transforms_to_3mf(
+        path_3mf: str,
+        tr: Transforms3MF,
+        mesh_vertices_from_freecad,
+        center=False,
+        cancel_rotation=False,
+        x0=None,
+        y0=None,
+    ):
+
+
+    Zmin_global = compute_Zmin_global(path_3mf, tr)
+
+    def modify_item_transforms(xml: str, center: bool, cancel_rotation: bool,
+                               x0, y0, Zmin_global, tr: Transforms3MF,
+                               path_3mf: str,
+                               mesh_vertices_from_freecad
+                               ) -> str:
+        if DEBUGPIPE: print('Début modify_item_transforms')
+        if DEBUGPIPE:
+            print("modify_item_transforms reçoit x0 =", x0, "y0 =", y0)
+
+        pattern = r'(<item[^>]*transform=")([^"]+)(")'
+        matches = list(re.finditer(pattern, xml))
+
+        new_xml = xml
+
+        for m in matches:
+            vals = m.group(2).split()
+
+            # rotation identité
+            if cancel_rotation:
+                vals[0:9] = ["1", "0", "0", "0", "1", "0", "0", "0", "1"]
+
+            # centrage XY
+            if center:
+                vals[9] = str(x0)
+                vals[10] = str(y0)
+
+
+            new_t = " ".join(vals)
+            start, end = m.span()
+            new_xml = new_xml[:start] + f'{m.group(1)}{new_t}{m.group(3)}' + new_xml[end:]
+
+        return new_xml
+
+    # ZIP temporaire
+    tmp_zip = tempfile.NamedTemporaryFile(delete=False)
+    tmp_zip.close()
+
+    with zipfile.ZipFile(path_3mf, 'r') as zin, \
+         zipfile.ZipFile(tmp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zout:
+
+        for info in zin.infolist():
+            data = zin.read(info.filename)
+
+            if info.filename == "3D/3dmodel.model":
+                xml = data.decode("utf-8")
+
+                # 1) Recopie brute
+                xml = copy_all_transforms(xml, tr)
+
+                # 2) Modifications sur <item>
+
+                xml = modify_item_transforms(
+                    xml,
+                    center,
+                    cancel_rotation,
+                    x0,
+                    y0,
+                    Zmin_global,
+                    tr,
+                    path_3mf,
+                    mesh_vertices_from_freecad
+                )
+
+
+                zout.writestr(info.filename, xml.encode("utf-8"))
+            else:
+                zout.writestr(info.filename, data)
+
+    shutil.move(tmp_zip.name, path_3mf)
+
+
+def extract_vertices_and_triangles_from_model_xml(xml_bytes):
+    """
+    Extraction TEXTE BRUT des vertices et triangles depuis un .model.
+    Compatible avec tous les slicers, sans namespace, sans ElementTree.
+    """
+    if DEBUG: print('début extract_vertices_and_triangles_from_model_xml')
+    text = xml_bytes.decode("utf-8", errors="replace")
+
+    # --- Extraction des vertices ---
+    verts = re.findall(
+        r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"',
+        text
+    )
+
+    vertices = [(float(x), float(y), float(z)) for x, y, z in verts]
+
+    # --- Extraction des triangles ---
+    tris = re.findall(
+        r'<triangle[^>]*v1="([^"]+)"[^>]*v2="([^"]+)"[^>]*v3="([^"]+)"',
+        text
+    )
+
+    triangles = [(int(v1), int(v2), int(v3)) for v1, v2, v3 in tris]
+
+    return vertices, triangles
+
+def extract_vertices_from_model_xml(xml_bytes):
+    """
+    Extrait la liste des vertices [(x,y,z), ...] depuis un XML 3MF (3D/3dmodel.model).
+    """
+    root = ET.fromstring(xml_bytes)
+
+    # Gestion du namespace éventuel
+    if "}" in root.tag:
+        ns_uri = root.tag.split("}")[0].strip("{")
+        ns = {"m": ns_uri}
+        vert_elems = root.findall(".//m:vertex", ns)
+    else:
+        vert_elems = root.findall(".//vertex")
+
+    vertices = []
+    for v in vert_elems:
+        x = float(v.get("x"))
+        y = float(v.get("y"))
+        z = float(v.get("z"))
+        vertices.append((x, y, z))
+
+    return vertices
+
+def compute_mesh_center(vertices):
+    xs = [v[0] for v in vertices]
+    ys = [v[1] for v in vertices]
+    zs = [v[2] for v in vertices]
+    return (
+        (min(xs) + max(xs)) / 2.0,
+        (min(ys) + max(ys)) / 2.0,
+        (min(zs) + max(zs)) / 2.0,
+    )
+
+def compute_translation_to_match_centers(freecad_vertices, vertices_3mf):
+    if DEBUGPIPE: print ('Début compute_translation_to_match_centers')
+    global global_origin_x, global_origin_y, global_origin_z
+    print('global_origin_x', global_origin_x)
+    center_fc = compute_mesh_center(freecad_vertices)
+    center_qidi = compute_mesh_center(vertices_3mf)
+
+    tx = center_qidi[0] - center_fc[0]
+    ty = center_qidi[1] - center_fc[1]
+    tz = center_qidi[2] - center_fc[2]
+
+    return (tx, ty, tz)
+
+def apply_translation(vertices, translation):
+    tx, ty, tz = translation
+    return [(x + tx, y + ty, z + tz) for (x, y, z) in vertices]
+
+# ------------------------------------------------------------
+# Analyse du fichier 3MF (nb objets et slicer)
+# ------------------------------------------------------------
+def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
+    """
+    Analyse un fichier 3MF et retourne :
+    - le nombre d'objets 3D (en filtrant les objets vides)
+    - le logiciel d'export (FreeCAD, PrusaSlicer, QidiSlicer, Cura, etc.)
+    Orcaslicer est détecté comme bambu car c'est un fork direct
+    """
+    result = {
+        'nombre_objets': None,
+        'logiciel': None
+    }
+
+    if not os.path.exists(file_path):
+        result = {
+            'nombre_objets': 'nofile',
+            'logiciel': 'nofile'
+        }
+        if DEBUG: print('Dans analyse_fichier_3mf : pas de fichier', os.path.basename(file_path))
+        return result
+
+        # ------------------------------------------------------------
+
+    # Normalisation du nom du logiciel
+    # ------------------------------------------------------------
+    def normaliser_logiciel(nom: str) -> str:
+        if not nom:
+            return "Inconnu"
+        txt = nom.strip()
+        lower = txt.lower()
+
+        # Table de correspondance
+        MAPPINGS = {
+            "qidistudio": "qidistudio",
+
+            "bambu": "qidistudio",  # Orca détecté comme Bambu
+            "orca": "qidistudio",  # même pipeline que QidiStudio
+            "creality": "qidistudio",  # Creality Print
+
+            "qidislicer": "qidislicer",
+            "cura": "qidislicer",
+            "superslicer": "qidislicer",
+
+            # Prusa-like (Slic3r family)
+            "prusaslicer": "slic3r",
+            #"superslicer": "slic3r",
+            "anycubic": "slic3r",  # Anycubic Slicer = fork Prusa
+            "flashprint": "slic3r",  # FlashPrint 5 = structure Prusa-like
+            "ideamaker": "slic3r",  # IdeaMaker = XML proche Prusa
+            "raise3d": "slic3r",  # Raise3D Slicer = IdeaMaker rebadgé
+
+
+
+            # FreeCAD
+            "freecad": "freecad",
+        }
+
+        # Recherche automatique
+        for key, value in MAPPINGS.items():
+            if key in lower:
+                return value
+
+        # Sinon : par défaut : idem prusa
+
+        return "slic3r"
+
+
+    with zipfile.ZipFile(file_path, 'r') as z:
+
+        # ------------------------------------------------------------
+        # 1. Compter les objets 3D (en filtrant les objets vides)
+        # ------------------------------------------------------------
+        with z.open('3D/3dmodel.model') as f:
+            model = ET.parse(f)
+            ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
+
+            objects = model.findall('.//m:object', ns)
+
+            objets_valides = []
+            for obj in objects:
+                has_mesh = obj.find('.//m:mesh', ns) is not None
+                has_components = obj.find('.//m:components', ns) is not None
+                if has_mesh or has_components:
+                    objets_valides.append(obj)
+
+            # Si aucun objet valide → fallback FreeCAD (mesh unique)
+            if objets_valides:
+                result['nombre_objets'] = len(objets_valides)
+            else:
+                meshes = model.findall('.//m:mesh', ns)
+                result['nombre_objets'] = len(meshes) if meshes else 1
+
+        # ------------------------------------------------------------
+        # 2. Détecter le logiciel qui a fourni la géométrie.
+        # ------------------------------------------------------------
+        logiciel_trouve = False
+
+        metadata_file = '3D/3dmodel.model'
+
+        with z.open(metadata_file) as f:
+            metadata = ET.parse(f)
+            root = metadata.getroot()
+            ns = {'m': 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'}
+
+            # --------------------------------------------------------
+            # 2.bis Détection QIDIStudio via métadonnées "QIDIStudio:*"
+            # --------------------------------------------------------
+            if not logiciel_trouve:
+                metas = root.findall('.//metadata') + root.findall('.//m:metadata', ns)
+                for meta in metas:
+                    name = meta.get('name', '').lower()
+                    if name.startswith("qidistudio:"):
+                        result['logiciel'] = "qidistudio"
+                        logiciel_trouve = True
+                        break
+
+            # --------------------------------------------------------
+            # 2.b Détection Cura via namespace
+            # --------------------------------------------------------
+            if not logiciel_trouve:
+                for k, v in root.attrib.items():
+                    if "ultimaker.com/xml/cura" in v.lower():
+                        result['logiciel'] = "Ultimaker Cura"
+                        logiciel_trouve = True
+                        break
+
+            # --------------------------------------------------------
+            # 2.c Détection Cura via métadonnées "cura:*"
+            # --------------------------------------------------------
+            if not logiciel_trouve:
+                # 1) métadonnées AVEC namespace
+                metas = root.findall('.//m:metadata', ns)
+                # 2) métadonnées SANS namespace
+                metas += root.findall('.//metadata')
+                for meta in metas:
+                    name = meta.get('name', '').lower()
+                    # Ignorer le metadata ajouté par la macro
+                    if name == "cura:drop_to_buildplate":
+                        continue
+
+                    if name.startswith("cura:"):
+                        result['logiciel'] = normaliser_logiciel("cura")
+                        logiciel_trouve = True
+                        break
+
+            # --------------------------------------------------------
+            # 2.d Détection via <metadata name="Application">
+            # --------------------------------------------------------
+            if not logiciel_trouve:
+                creator = metadata.find('.//Creator') or metadata.find('.//Application')
+                if creator is None:
+                    for meta in root.findall('.//m:metadata', ns):
+                        if meta.get('name', '').lower() == 'application':
+                            creator = meta
+                            break
+
+                if creator is None:
+                    for meta in root.findall('.//metadata'):
+                        if meta.get('name', '').lower() == 'application':
+                            creator = meta
+                            break
+
+                if creator is not None and creator.text:
+                    result['logiciel'] = normaliser_logiciel(creator.text)
+                    logiciel_trouve = True
+
+        # ------------------------------------------------------------
+        # 4. Détection FreeCAD via texte brut
+        # ------------------------------------------------------------
+        if not logiciel_trouve:
+            with z.open('3D/3dmodel.model') as f:
+                content = f.read().decode('utf-8', errors='ignore')
+                if "freecad" in content.lower():
+                    result['logiciel'] = "freecad"
+                else:
+                    result['logiciel'] = "unknown"
+
+    return result
+
+def nameSlicer(File3mf: str):
+    result = analyse_fichier_3mf(File3mf)
+    return result['logiciel']
+
+def zip_contains_real_mesh(zip_path):
+    """
+    Retourne True si le 3MF contient au moins un <mesh>.
+    Fonction fiable pour Cura, Qidi, Prusa, Orca, etc.
+    """
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zin:
+            for name in zin.namelist():
+                if name.endswith(".model"):
+                    data = zin.read(name)
+                    if b"<mesh" in data:
+                        return True
+    except Exception as e:
+        print("⚠️ zip_contains_real_mesh Erreur lecture 3MF :", e)
+    return False
+
+# Recherche le fichier de géométrie principal dans une archive 3MF
+def find_geom_file_in_3mf(zip_path):
+    if not os.path.exists(zip_path):
+        if DEBUG:
+            print(' dans find_geom_file_in_3mf fichier src_3mf inexistant', zip_path)
+
+    with zipfile.ZipFile(zip_path, 'r') as z:
+        rels_name = "_rels/.rels"
+        if rels_name in z.namelist():
+            try:
+                rels_text = z.read(rels_name).decode("utf-8")
+                root = ET.fromstring(rels_text)
+                for rel in root:
+                    if rel.tag.endswith("Relationship"):
+                        rtype = rel.attrib.get("Type", "")
+                        if rtype.endswith("3dmodel"):
+                            target = rel.attrib.get("Target")
+                            if target and target.startswith("/"):
+                                target = target[1:]
+                            if target in z.namelist():
+                                return target
+            except Exception:
+                pass
+        for name in z.namelist():
+            if fnmatch.fnmatch(name, "3D/Objects/*.model"):
+                return name
+        if "3D/3dmodel.model" in z.namelist():
+            return "3D/3dmodel.model"
+    return None
+
+# Exporte une sélection en STL avec paramètres de tessellation
+def export_stl_with_deflection(selection, stl_path,
+                               linear_deflection=DEFAULT_LINEAR_DEFLECTION,
+                               angular_deflection=DEFAULT_ANGULAR_DEFLECTION):
+    print('Export en stl')
+    doc = FreeCAD.ActiveDocument
+    temp_objs = []
+    try:
+        for obj in selection:
+            """
+            https://dev.opencascade.org/doc/occt-7.3.0/overview/html/occt_user_guides__modeling_algos.html#occt_modalg_11_2
+            Déviation de surface : la déviation linéaire maximale d'une section de maillage par rapport à la surface de l'objet.
+            Déviation angulaire : la déviation angulaire maximale d'une section de maillage à la suivante. Ce paramètre 
+                est utilisé lors du maillage de surfaces courbes.
+            Déviation relative de surface : si coché, la déviation linéaire maximale d'un segment de maillage sera la 
+                Déviation de surface spécifiée multipliée par la longueur du segment de maillage en cours (arête).
+                ex 0.01 passé en paramètre pour un segment de 10 mm -> 0.1 mm
+            """
+
+            mesh = MeshPart.meshFromShape(
+                Shape=obj.Shape,
+                LinearDeflection=float(linear_deflection),
+                AngularDeflection=float(angular_deflection),
+                Relative=False
+            )
+            mobj = doc.addObject("Mesh::Feature", f"TempMeshSTL_{obj.Name}")
+            mobj.Mesh = mesh
+            temp_objs.append(mobj)
+        doc.recompute()
+        Mesh.export(temp_objs, stl_path)
+    finally:
+        for t in temp_objs:
+            try:
+                doc.removeObject(t.Name)
+            except Exception:
+                pass
+        doc.recompute()
+
+# Exporte une sélection en 3MF avec paramètres de tessellation
+def export_selection_with_deflection(selection, out_3mf_path,
+                                     linear_deflection=DEFAULT_LINEAR_DEFLECTION,
+                                     angular_deflection=DEFAULT_ANGULAR_DEFLECTION):
+
+    print('Exportation du fichier 3mf par Freecad')
+    doc = FreeCAD.ActiveDocument
+    temp_objs = []
+    try:
+        for obj in selection:
+            mesh = MeshPart.meshFromShape(
+                Shape=obj.Shape,
+                LinearDeflection=float(linear_deflection),
+                AngularDeflection=float(angular_deflection),
+                Relative=False
+            )
+            mobj = doc.addObject("Mesh::Feature", f"TempMesh_{obj.Name}")
+            mobj.Mesh = mesh
+            temp_objs.append(mobj)
+        doc.recompute()
+        Mesh.export(temp_objs, out_3mf_path)
+    finally:
+        for t in temp_objs:
+            try:
+                doc.removeObject(t.Name)
+            except Exception:
+                pass
+        doc.recompute()
+    print("Fin d'exportation")
+
+def force_zmax_in_transform(model_data, decalz):
+    """
+    Remplace uniquement la composante Z (12e valeur) du transform des <item> dans 3dmodel.model.
+    - Conserve X/Y et la matrice de rotation/échelle.
+    - decalz (hauteur max des vertex) calculé par recenter_vertices.
+
+    Si plusieurs <item> existent, on les met tous à jour.
+    """
+
+    text = model_data.decode("utf-8")
+
+    def repl(m):
+        nums = m.group(1).split()
+        # transform = 12 nombres : 9 pour la matrice, 3 pour la translation (X, Y, Z)
+        if len(nums) == 12:
+            nums[-1] = f"{decalz}"
+            return 'transform="' + " ".join(nums) + '"'
+        # Si format inattendu, on ne modifie pas
+        return m.group(0)
+
+    # Met à jour tous les transform="..."; count=0 = sans limite
+    text = re.sub(r'transform="([^"]+)"', repl, text, count=0)
+    return text.encode("utf-8")
+
+def correct_item_transform_z(model_data_centered, transform_str):
+    # Calcule un transform corrigé (tz ajusté) en lisant les vertices du mesh recentré.
+    if DEBUGPIPE: print('Début correct_item_transform_z')
+    text = model_data_centered.decode("utf-8", errors="replace")
+
+    # --- 1) Extraction des vertices par regex ---
+    import re
+    vertex_pattern = r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"'
+    verts = re.findall(vertex_pattern, text)
+
+    if not verts:
+        return transform_str  # rien à corriger
+
+    vertices = [(float(x), float(y), float(z)) for (x, y, z) in verts]
+
+    # --- 2) Lire la matrice transform ---
+    values = [float(x) for x in transform_str.split()]
+    if DEBUG: print('values', values)
+    if len(values) != 12:
+        return transform_str
+
+    a, b, c, d, e, f, g, h, i, tx, ty, tz = values
+
+    # --- 3) Appliquer la rotation complète ---
+    z_rotated = []
+    for (x, y, z) in vertices:
+        zr = g * x + h * y + i * z
+        z_rotated.append(zr)
+
+    Zmin_rot = min(z_rotated)
+    Zmin_effectif = Zmin_rot + tz
+
+    tz_corrected = tz - Zmin_effectif
+
+    if DEBUG:
+        print(f"[DEBUG ROT] Zmin_rot={Zmin_rot:.3f}, tz={tz:.3f} → tz_corrected={tz_corrected:.3f}")
+
+    # --- 4) Retourner le transform corrigé ---
+    new_values = [a, b, c, d, e, f, g, h, i, tx, ty, tz_corrected]
+    return " ".join(f"{v:.6f}" for v in new_values)
+
+def clean_multi_object_style(src_3mf, dst_3mf):
+    """
+    Nettoyage CHIRURGICAL d'un 3MF QidiStudio.
+    Version corrigée + PATCH chemins :
+    - Normalisation des chemins (strip + replace)
+    - Détection correcte du parent (object id="X")
+    - Suppression des objets excédentaires
+    - Suppression des items excédentaires
+    - Suppression des relations excédentaires
+    - Nettoyage complet de Metadata/model_settings.config
+    """
+
+    if DEBUG: print("\n=== clean_multi_object_style ===")
+    if not os.path.exists(src_3mf):
+        if DEBUG: print(' dans clean_multi_object_style fichier src_3mf inexistant', src_3mf)
+
+    rels_path = "3D/_rels/3dmodel.model.rels"
+    config_path = "Metadata/model_settings.config"
+    model_path = "3D/3dmodel.model"
+
+    with zipfile.ZipFile(src_3mf, "r") as zin:
+
+        # --- 1) Détection des fichiers objets ---
+        object_models = [
+            n.strip().replace("\\", "/")
+            for n in zin.namelist()
+            if n.startswith("3D/Objects/") and n.endswith(".model")
+        ]
+
+
+        if not object_models:
+            # Cas Cura / Prusa / QidiSlicer / FreeCAD : mono-objet standard
+            if DEBUG: print("ℹ️ Aucun fichier 3D/Objects/*.model → mono-objet standard")
+            shutil.copy(src_3mf, dst_3mf)
+            return None, "3D/3dmodel.model"
+
+
+        keep_model = object_models[0]
+        to_delete = object_models[1:]
+
+
+
+        # --- 2) Nettoyage CHIRURGICAL du 3dmodel.model ---
+        model_txt = zin.read(model_path).decode("utf-8")
+
+
+
+        parent_pattern = (
+            rf'<object[^>]*id="(\d+)"[^>]*>[\s\S]*?'
+            rf'<component[^>]*(?:p|ns\d*):path="/{keep_model}"'
+        )
+
+        m = re.search(parent_pattern, model_txt)
+
+        if not m:
+            if DEBUG:  print("❌ Impossible de trouver l'objet parent dans 3dmodel.model")
+            return None, keep_model
+
+        keep_object_id = m.group(1)
+
+        # SUPPRESSION des <object> excédentaires
+        model_txt_before = model_txt
+        model_txt = re.sub(
+            rf'<object[^>]*id="(?!{keep_object_id}")([\s\S]*?)</object>',
+            '',
+            model_txt
+        )
+        if model_txt != model_txt_before:
+            if DEBUG: print("🗑️ Objets excédentaires supprimés dans 3dmodel.model")
+        # SUPPRESSION des <item> excédentaires
+        model_txt_before = model_txt
+        model_txt = re.sub(
+            rf'<item[^>]*objectid="(?!{keep_object_id}")([^"]*)"[^>]*/>',
+            '',
+            model_txt
+        )
+        if model_txt != model_txt_before:
+            if DEBUG: print("🗑️ Items excédentaires supprimés dans <build>")
+
+        # --- 3) Nettoyage du rels ---
+        if rels_path in zin.namelist():
+            rels_txt = zin.read(rels_path).decode("utf-8")
+            rels_before = rels_txt
+
+            rels_txt = re.sub(
+                rf'<Relationship[^>]*Target="(?!/{keep_model}")([^"]*)"[^>]*/>',
+                '',
+                rels_txt
+            )
+
+            if rels_txt != rels_before:
+                if DEBUG: print("🗑️ Relations excédentaires supprimées dans rels")
+
+        # --- 4) Nettoyage complet du model_settings.config ---
+        if config_path in zin.namelist():
+            cfg_txt = zin.read(config_path).decode("utf-8")
+
+            # SUPPRESSION <object id="...">
+            cfg_before = cfg_txt
+            cfg_txt = re.sub(
+                rf'<object[^>]*id="(?!{keep_object_id}")([\s\S]*?)</object>',
+                '',
+                cfg_txt
+            )
+            if cfg_txt != cfg_before:
+                if DEBUG: print("🗑️ Objets excédentaires supprimés dans model_settings.config")
+
+            # SUPPRESSION <model_instance>
+            cfg_before = cfg_txt
+            cfg_txt = re.sub(
+                rf'<model_instance>[\s\S]*?<metadata key="object_id" value="(?!{keep_object_id}")([\s\S]*?)</model_instance>',
+                '',
+                cfg_txt
+            )
+            if cfg_txt != cfg_before:
+                if DEBUG: print("🗑️ model_instance excédentaires supprimés")
+
+            # SUPPRESSION <assemble_item>
+            cfg_before = cfg_txt
+            cfg_txt = re.sub(
+                rf'<assemble_item[^>]*object_id="(?!{keep_object_id}")([^"]*)"[^>]*/>',
+                '',
+                cfg_txt
+            )
+            if cfg_txt != cfg_before:
+                if DEBUG: print("🗑️ assemble_item excédentaires supprimés")
+
+        # --- 5) Réécriture du ZIP ---
+        if DEBUG: print("📦 Réécriture du fichier nettoyé…")
+
+        # compression = zipfile.ZIP_STORED if mode == "qidi" else zipfile.ZIP_DEFLATED
+        # with zipfile.ZipFile(dst_3mf, "w", compression=compression) as zout:
+        with zipfile.ZipFile(dst_3mf, "w", compression=zipfile.ZIP_STORED) as zout:
+
+            for item in zin.infolist():
+                name = item.filename.strip().replace("\\", "/")
+
+                # SUPPRESSION des fichiers objets excédentaires
+                if name.startswith("3D/Objects/") and name != keep_model:
+                    if DEBUG: print(f"🗑️ Suppression fichier : {name}")
+                    continue
+
+                if name == model_path:
+                    zout.writestr(name, model_txt)
+                    continue
+
+                if name == rels_path:
+                    zout.writestr(name, rels_txt)
+                    continue
+
+                if name == config_path:
+                    zout.writestr(name, cfg_txt)
+                    continue
+
+                zout.writestr(name, zin.read(item.filename))
+
+    if DEBUG: print("✅ Nettoyage terminé.")
+    if DEBUG: print(f"➡️ Objet final conservé : {keep_model} (id={keep_object_id})")
+    if DEBUG: print(f"➡️ Fichier nettoyé : {dst_3mf}")
+
+    return keep_object_id, keep_model
+
+def replace_mesh_in_model_xml(old_model_xml_bytes, new_model_xml_bytes):
+    # if correct_item_transform_z: print('Début replace_mesh_in_model_xml') ###############################################################################################
+    old_text = old_model_xml_bytes.decode("utf-8", errors="replace")
+    new_text = new_model_xml_bytes.decode("utf-8", errors="replace")
+
+    # --- Extraire le bloc <mesh> du nouveau modèle ---
+    m_new = re.search(r"<mesh[^>]*>([\s\S]*?)</mesh>", new_text)
+    if not m_new:
+        if DEBUG:
+            print("⚠️ replace_mesh_in_model_xml : aucun <mesh> trouvé dans NEW model")
+        return old_model_xml_bytes
+
+    new_mesh_block = m_new.group(0)
+
+
+    # --- Remplacer le bloc <mesh> ---
+    old_text_new = re.sub(
+        r"<mesh[^>]*>[\s\S]*?</mesh>",
+        new_mesh_block,
+        old_text,
+        count=1
+    )
+
+
+
+    return old_text_new.encode("utf-8")
+
+def ask_incompatible_slicer_dialog(s_source, s_target):
+    """
+    Boîte de dialogue Qt en cas de slicer source != slicer cible.
+    Retourne: "keep", "delete" ou "cancel".
+    """
+    msg = QtGui.QMessageBox()
+    msg.setIcon(QtGui.QMessageBox.Warning)
+    msg.setWindowTitle(tr("warn_title"))
+
+    # Texte multilingue avec insertion des valeurs
+    txt = tr("warn_incompatible_slicer_dialog").format(
+        source=s_source,
+        target=s_target
+    )
+    msg.setText(txt)
+
+    # Boutons
+    btn_delete = msg.addButton(tr("btn_delete"), QtGui.QMessageBox.DestructiveRole)
+    btn_cancel = msg.addButton(tr("btn_cancel"), QtGui.QMessageBox.RejectRole)
+
+    msg.exec()
+
+    if msg.clickedButton() == btn_delete:
+        return "delete"
+    return "cancel"
+
+def prepare_environment():
+    """
+    Prépare l’environnement :
+    - charge la config
+    - vérifie le document FreeCAD
+    - détecte le .3mf existant
+    - renomme en .old.3mf si nécessaire
+
+    Retourne :
+        (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
+    ou None en cas d’erreur.
+    """
+
+    cfg = load_config()
+
+    # Vérification document
+    doc = FreeCAD.ActiveDocument
+    if not doc:
+        show_message(tr("error_title"), tr("error_no_doc"))
+        return None
+
+    fcstd_path = doc.FileName
+    if not fcstd_path:
+        show_message(tr("error_title"), tr("error_no_save"))
+        return None
+
+    # Construction des chemins
+    base_name = os.path.splitext(fcstd_path)[0]
+    fc_3mf = base_name + ".3mf"
+    old_3mf_backup = base_name + ".old.3mf"
+
+    # Détection du .3mf existant AVANT export
+    fc_3mf_existed_at_start = os.path.exists(fc_3mf)
+
+    return (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
+
+def get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start):
+    """
+    Vérifie la sélection FreeCAD :
+    - 0 objet → message + restauration éventuelle
+    - >1 objet → message + restauration éventuelle
+    Retourne :
+        [obj]  → sélection valide
+        None   → erreur ou annulation
+    """
+
+    # Récupération des objets sélectionnés ayant une Shape valide
+
+    """
+    selection = [
+        obj for obj in FreeCADGui.Selection.getSelection()
+        if hasattr(obj, "Shape") and obj.Shape is not None
+    ]
+    """
+
+    sel_ex = FreeCADGui.Selection.getSelectionEx()
+    selection = []
+
+    for s in sel_ex:
+        obj = s.Object
+        if hasattr(obj, "Shape"):
+            try:
+                shape = obj.Shape
+                if shape and not shape.isNull() and shape.Volume > 0:
+                    selection.append(obj)
+            except Exception:
+                pass
+
+    # Aucun objet sélectionné
+    if not selection:
+        show_message(tr("warn_title"), tr("warn_no_selection"))
+
+        # Restauration éventuelle du .old.3mf
+        if fc_3mf_existed_at_start \
+                and os.path.exists(old_3mf_backup) \
+                and not os.path.exists(fc_3mf):
+            if DEBUG: print('move ', os.path.basename(old_3mf_backup), 'vers', os.path.basename(fc_3mf))
+            shutil.move(old_3mf_backup, fc_3mf)
+
+        return None
+
+    # Trop d’objets sélectionnés
+    if len(selection) > 1:
+        show_message(tr("warn_title"), tr("warn_multi_selection"))
+
+        # Restauration éventuelle du .old.3mf
+        if fc_3mf_existed_at_start \
+                and os.path.exists(old_3mf_backup) \
+                and not os.path.exists(fc_3mf):
+            shutil.move(old_3mf_backup, fc_3mf)
+
+        return None
+    # Sélection valide : un seul objet
+    return selection
+
+def export_freecad_files(selection, base_name, fc_3mf, generate_stl,
+                         linear_value, angular_value,
+                         fc_3mf_existed_at_start, old_3mf_backup):
+    """
+    Exporte :
+    - 3MF FreeCAD
+    - STL si demandé
+
+    Gère :
+    - erreurs d’export
+    - restauration éventuelle du .old.3mf
+
+    Retourne :
+        True  → export OK
+        False → erreur ou restauration
+    """
+    if DEBUGPIPE:
+        print('Début export_freecad_files')
+
+
+    # ------------------------------------------------------------
+    # Export 3MF FreeCAD
+    # ------------------------------------------------------------
+    try:
+        export_selection_with_deflection(
+            selection, fc_3mf,
+            linear_deflection=linear_value,
+            angular_deflection=angular_value
+        )
+    except Exception as e:
+        show_message(tr("error_title"), f"{tr('error_export_3mf')} {e}")
+
+        # Restauration éventuelle
+        if fc_3mf_existed_at_start \
+                and os.path.exists(old_3mf_backup) \
+                and not os.path.exists(fc_3mf):
+            if DEBUG: print('move ', os.path.basename(old_3mf_backup), 'vers', os.path.basename(fc_3mf))
+            shutil.move(old_3mf_backup, fc_3mf)
+
+        return False
+
+    # ------------------------------------------------------------
+    # Export STL (optionnel)
+    # ------------------------------------------------------------
+    if generate_stl:
+        try:
+            export_stl_with_deflection(
+                selection, base_name + ".stl",
+                linear_deflection=linear_value,
+                angular_deflection=angular_value
+            )
+        except Exception as e:
+            show_message(tr("error_title"), f"{tr('error_generate_stl')} {e}")
+            # On continue malgré l’erreur STL
+
+    return True
+
+def handle_empty_plate(fc_3mf_existed_at_start, old_3mf_backup, fc_3mf):
+    if DEBUGPIPE: print('Début handle_empty_plate')
+    """
+    Analyse le plateau vide sur fc_3mf:
+    - Si un 3MF existait avant l’export FreeCAD
+    - Si fc_3mf ne contient aucun mesh réel
+    → propose :
+        • Restaurer l'ancien 3MF
+        • Repartir à zéro
+        • Annuler
+
+    Peut relancer la macro automatiquement.
+
+    Retourne :
+        True  → continuer le workflow
+        False → arrêter la macro
+    """
+
+    # On ne teste le plateau vide QUE si un 3MF existait avant l’export
+    if not fc_3mf_existed_at_start:
+        return True
+
+    # Vérifie si fc_3mf existe et contient un vrai mesh
+    if not (os.path.exists(fc_3mf) and not zip_contains_real_mesh(fc_3mf)):
+        return True  # Pas de plateau vide → on continue
+
+    # Plateau vide détecté → boîte de dialogue
+    msg = tr("warn_empty_plate")
+
+    box = QtGui.QMessageBox()
+    box.setWindowTitle(tr("warn_empty_plate_title"))
+    box.setText(msg)
+
+    restore_btn = box.addButton(tr("btn_restore_old_3mf"), QtGui.QMessageBox.AcceptRole)
+    reset_btn = box.addButton(tr("btn_reset_new_project"), QtGui.QMessageBox.DestructiveRole)
+    cancel_btn = box.addButton(QtGui.QMessageBox.Cancel)
+
+    box.exec()
+    clicked = box.clickedButton()
+
+    # ----------------------------------------------------------------------------
+    # 1) Restaurer l'ancien 3MF = Copie old_3mf_backup en fc_3mf et relance la macro
+    # ----------------------------------------------------------------------------
+    if clicked == restore_btn:
+
+        if DEBUG: print('copy ', os.path.basename(old_3mf_backup), 'vers', os.path.basename(fc_3mf))
+        shutil.copy(old_3mf_backup, fc_3mf)
+
+        # ----------------------Relance de la macro -----------------------------------
+        export_replace_geometry()
+        return False  # On arrête ce cycle
+
+    # ------------------------------------------------------------
+    # 2) Repartir à zéro = on efface fc_3mf et on relance la macro
+    # ------------------------------------------------------------
+    elif clicked == reset_btn:
+        if os.path.exists(fc_3mf):
+            os.remove(fc_3mf)
+            old_3mf = base_name + ".old.3mf"
+        if os.path.exists(old_3mf):
+            os.remove(old_3mf)
+            if DEBUG: print("Suppression de", os.path.basename(old_3mf))
+
+        if DEBUG: print("🗑️ New projet : 3MF FreeCAD deleted. Macro run again.")
+        export_replace_geometry()
+        return False  # On arrête ce cycle
+
+    # ------------------------------------------------------------
+    # 3) Annuler
+    # ------------------------------------------------------------
+    else:
+        if DEBUG: print("ℹ️ Annulé par l’utilisateur.")
+        return False
+
+def origin_in_3mf(path_3mf):
+    """
+    Retourne (global_origin_x, global_origin_y, global_origin_z)
+    selon les 4 cas définis.
+    """
+
+    if DEBUGPIPE: print("Début origin_in_3mf")
+
+    # Cas 1 : pas de 3MF
+    if not path_3mf or not os.path.exists(path_3mf):
+        return 0.0, 0.0, 0.0
+
+    try:
+        with zipfile.ZipFile(path_3mf, 'r') as z:
+            namelist = z.namelist()
+
+            # Cas 2 : pas de fichier Slic3r_PE_model.config
+            cfg_name = None
+            for name in namelist:
+                if name.lower().endswith("slic3r_pe_model.config"):
+                    cfg_name = name
+                    break
+
+
+            if cfg_name is None:
+                return 0.0, 0.0, 0.0
+
+            # Lecture brute du fichier config
+            text = z.read(cfg_name).decode("utf-8", errors="ignore")
+
+
+            # Extraction naïve
+            def extract_value(key):
+                prefix = f'key="{key}"'
+                idx = text.find(prefix)
+                if idx == -1:
+
+                    return None
+                start = text.find('value="', idx)
+                if start == -1:
+                    return None
+                start += len('value="')
+                end = text.find('"', start)
+                if end == -1:
+                    return None
+                val = text[start:end]
+                return val
+
+            # Matrice
+            matrix_str = extract_value("matrix")
+            if matrix_str:
+                parts = matrix_str.split()
+                if len(parts) == 16:
+                    matrix = list(map(float, parts))
+                else:
+                    print("Matrice invalide :", matrix_str)
+                    matrix = None
+            else:
+                print("Aucune matrice trouvée")
+                matrix = None
+
+            # Offsets
+            ox = extract_value("source_offset_x")
+            oy = extract_value("source_offset_y")
+            oz = extract_value("source_offset_z")
+
+            ox = float(ox) if ox else 0.0
+            oy = float(oy) if oy else 0.0
+            oz = float(oz) if oz else 0.0
+
+
+            # Cas 3 : matrice identité ?
+            if matrix is None:
+                return 0.0, 0.0, 0.0
+
+            ident = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
+            tol = 1e-6
+            matrix_is_identity = all(abs(a-b) < tol for a,b in zip(matrix, ident))
+
+
+            if matrix_is_identity:
+                return 0.0, 0.0, 0.0
+
+            # Cas 4 : matrice non-identité
+            return ox, oy, oz
+
+    except Exception as e:
+        print("Exception dans origin_in_3mf :", e)
+        return 0.0, 0.0, 0.0
+
+def recenter_vertices(model_data):
+    """
+    Recentrage XYZ en mode TEXTE BRUT.
+    - Aucun parseur XML
+    - Aucun namespace ajouté
+    - Compatible avec tous les slicers
+    """
+
+    if DEBUGPIPE:
+        print(" Début Recenter_vertices")
+
+    try:
+        text = model_data.decode("utf-8")
+
+        # --- 1) Extraction des vertices ---
+        verts = re.findall(
+            r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"',
+            text
+        )
+
+        if not verts:
+            if DEBUG:
+                print("⚠️ Aucun vertex trouvé dans recenter_vertices()")
+            return model_data, (0.0, 0.0, 0.0), []
+
+        xs = [float(v[0]) for v in verts]
+        ys = [float(v[1]) for v in verts]
+        zs = [float(v[2]) for v in verts]
+
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+        zmin, zmax = min(zs), max(zs)
+
+        # Centres XYZ
+        cx = (xmin + xmax) / 2.0
+        cy = (ymin + ymax) / 2.0
+        cz = (zmin + zmax) / 2.0
+
+        if DEBUG:
+            print(f"  xmin={xmin}, xmax={xmax}, cx={cx}")
+            print(f"  ymin={ymin}, ymax={ymax}, cy={cy}")
+            print(f"  zmin={zmin}, zmax={zmax}, cz={cz}")
+
+        # --- 2) Fonction de remplacement ---
+        def repl(m):
+            x = float(m.group(1)) - cx
+            y = float(m.group(2)) - cy
+            z = float(m.group(3)) - cz
+            return f'<vertex x="{x:.6f}" y="{y:.6f}" z="{z:.6f}"/>'
+
+        # --- 3) Réécriture du texte ---
+        new_text = re.sub(
+            r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"[^>]*/?>',
+            repl,
+            text
+        )
+
+        # Extraction des vertices après recentrage
+        verts_after = re.findall(
+            r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"',
+            new_text
+        )
+
+        vertices_centered = [
+            (float(v[0]), float(v[1]), float(v[2]))
+            for v in verts_after
+        ]
+
+        return new_text.encode("utf-8"), (cx, cy, cz), vertices_centered
+
+    except Exception as e:
+        if DEBUG:
+            print("⚠️ Erreur dans recenter_vertices (mode texte brut) :", e)
+
+        return model_data, (0.0, 0.0, 0.0), []
+
+def apply_common_transform_to_3dmodel(model_xml_bytes, geom_data_centered, ignore_transform):
+    if DEBUGPIPE: print('Début apply_common_transform_to_3dmodel')
+    if not ignore_transform:
+        return model_xml_bytes
+
+    text = model_xml_bytes.decode("utf-8", errors="replace")
+
+    import re
+
+    # 1) cibler uniquement le transform du <item ...>
+    item_pattern = r'(<item[^>]*transform=")([^"]*)(")'
+
+    m = re.search(item_pattern, text)
+    if not m:
+        return model_xml_bytes
+
+    old_transform = m.group(2)
+
+    # 2) recentrage XY
+    Xc = PLATEAU_X / 2
+    Yc = PLATEAU_Y / 2
+    base_transform = f"1 0 0 0 1 0 0 0 1 {Xc} {Yc} 0"
+
+    # 3) correction Z
+    corrected_transform = correct_item_transform_z(geom_data_centered, old_transform)
+
+    # 4) remplacement via fonction (évite les \1, \3)
+    def repl(match):
+        return match.group(1) + corrected_transform + match.group(3)
+
+    updated = re.sub(item_pattern, repl, text, count=1)
+
+    return updated.encode("utf-8")
+
+def inject_geometry_into_qidislicer_3mf(old_3mf_path, new_3mf_path, new_model_xml_bytes,
+                                        decal_z, ignore_transform,
+                                        ):
+
+    if DEBUGPIPE:
+        print("Début inject_geometry_into_qidislicer_3mf")
+
+    if not os.path.exists(old_3mf_path):
+        if DEBUG:
+            print("⚠️ Fichier Qidi introuvable :", old_3mf_path)
+        return
+
+    meta_name = "Metadata/Slic3r_PE_model.config"
+    corrected_metadata = None
+
+    with zipfile.ZipFile(old_3mf_path, "r") as zin, \
+         zipfile.ZipFile(new_3mf_path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+
+        for info in zin.infolist():
+            name = info.filename
+            data = zin.read(name)
+
+            # ------------------------------------------------------------
+            # 1) Remplacement du mesh dans 3D/3dmodel.model
+            # ------------------------------------------------------------
+            if name == "3D/3dmodel.model":
+
+                # --- Extraction vertices Qidi ---
+                vertices_3mf = extract_vertices_from_model_xml(data)
+
+                # --- Extraction vertices FreeCAD ---
+                freecad_vertices, freecad_triangles = extract_vertices_and_triangles_from_model_xml(
+                    new_model_xml_bytes
+                )
+
+                # --- Translation FreeCAD → Qidi ---
+                translation = compute_translation_to_match_centers(
+                    freecad_vertices,
+                    vertices_3mf,
+                )
+
+                if DEBUG:
+                    print("Translation FreeCAD → Qidi =", translation)
+
+                # --- Application translation ---
+                freecad_vertices_corrected = apply_translation(
+                    freecad_vertices, translation
+                )
+
+                # --- Reconstruction XML FreeCAD aligné ---
+                aligned_model_xml = build_model_xml(
+                    freecad_vertices_corrected, freecad_triangles
+                )
+
+                # --- Remplacement du mesh dans le XML Qidi ---
+                merged = replace_mesh_in_model_xml(data, aligned_model_xml)
+
+                # ------------------------------------------------------------
+                # 2) Correction Metadata Qidi (texte brut)
+                # ------------------------------------------------------------
+                if meta_name in zin.namelist():
+                    meta_data = zin.read(meta_name).decode("utf-8")
+
+                    # Nombre de triangles
+                    lastid = len(freecad_triangles) - 1
+                    if DEBUG:
+                        print(">>> Qidi Metadata fix → lastid =", lastid)
+
+                    # Correction brute
+                    meta_data = re.sub(r'firstid="\d+"', 'firstid="0"', meta_data)
+                    meta_data = re.sub(r'lastid="\d+"', f'lastid="{lastid}"', meta_data)
+
+                    corrected_metadata = meta_data.encode("utf-8")
+
+                # Écriture du fichier 3D/3dmodel.model corrigé
+                zout.writestr(name, merged)
+                continue
+
+            # ------------------------------------------------------------
+            # 3) Écriture du Metadata corrigé
+            # ------------------------------------------------------------
+            if name == meta_name:
+                if corrected_metadata is not None:
+                    zout.writestr(name, corrected_metadata)
+                else:
+                    zout.writestr(name, data)
+                continue
+
+            # ------------------------------------------------------------
+            # 4) Recopie du reste
+            # ------------------------------------------------------------
+            zout.writestr(name, data)
+    return freecad_vertices_corrected
+
+def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start,
+                                slicer_path, ignore_transform):
+    """
+    Injection géométrique dans un fichier 3MF existant.
+    """
+    cleaned_old_3mf = base_name + ".cleaned.3mf"
+    tmp_new = base_name + ".new.3mf"
+    try:
+        if DEBUGPIPE: print('Début inject_geometry_if_possible')
+
+        # ------------------------------------------------------------
+        # 1) Vérifier si injection possible
+        # ------------------------------------------------------------
+        is_slicer_file = os.path.exists(old_3mf_backup) and zip_contains_real_mesh(old_3mf_backup)
+        inject_possible = fc_3mf_existed_at_start and is_slicer_file
+
+        if not inject_possible:
+            if DEBUG: print("✅ Inject not possible. File generated exclusively by FreeCAD :", fc_3mf)
+            return "no_injection", None
+
+
+        # ------------------------------------------------------------
+        # 2) Détection du slicer source
+        # ------------------------------------------------------------
+        slicer_source = nameSlicer(old_3mf_backup)
+        if DEBUG: print('slicer_source', slicer_source)
+
+        # ------------------------------------------------------------
+        # 3) Détection du slicer cible
+        # ------------------------------------------------------------
+        slicer_target = detect_slicer_target_from_path(slicer_path) if slicer_path else None
+
+        # ------------------------------------------------------------
+        # 4) Gestion des incompatibilités
+        # ------------------------------------------------------------
+        if slicer_target not in (None, "unknown") and slicer_source not in ("none", "unknown", "freecad") \
+                and slicer_source != slicer_target:
+
+            action = ask_incompatible_slicer_dialog(slicer_source, slicer_target)
+            if DEBUG: print("action =", action)
+
+            if action == "cancel":
+                if os.path.exists(fc_3mf):
+                    os.remove(fc_3mf)
+                if fc_3mf_existed_at_start and os.path.exists(old_3mf_backup):
+                    shutil.move(old_3mf_backup, fc_3mf)
+                return "cancel", None
+
+            if action == "delete":
+                if DEBUG: print("🗑️ Suppression de l’ancien 3MF incompatible.")
+                try:
+                    os.remove(old_3mf_backup)
+                except Exception as e:
+                    if DEBUG: print("⚠️ Impossible de supprimer :", e)
+                inject_possible = False
+
+        if not inject_possible:
+            if DEBUG: print("⚠️ Injection impossible, export FreeCAD seul.")
+            return "no_injection", None
+
+
+        # ------------------------------------------------------------
+        # 5) Nettoyage du 3MF selon le slicer source
+        # ------------------------------------------------------------
+        # cleaned_old_3mf = base_name + ".cleaned.3mf"
+        keep_model = None
+        keep_object_id = None
+
+        if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
+            keep_object_id, keep_model = clean_multi_object_style(
+                old_3mf_backup, cleaned_old_3mf
+            )
+        else:
+            shutil.copy(old_3mf_backup, cleaned_old_3mf)
+            keep_model = "3D/Objects/object_1.model"
+
+        if slicer_source == "qidistudio" or not os.path.exists(cleaned_old_3mf):
+            old_3mf = old_3mf_backup
+        else:
+            old_3mf = cleaned_old_3mf
+
+        # ------------------------------------------------------------
+        # 6) Extraction géométrie FreeCAD
+        # ------------------------------------------------------------
+        geom_entry = find_geom_file_in_3mf(fc_3mf)
+        if not geom_entry:
+            show_message(tr("error_title"), tr("error_no_geom"))
+            return "no_injection", None
+
+
+        with zipfile.ZipFile(fc_3mf, 'r') as fc_zip:
+            geom_data = fc_zip.read(geom_entry)
+
+
+
+        # ------------------------------------------------------------
+        # 6 bis) Recentrage final pour QidiSlicer (pipeline dédié)
+        # ------------------------------------------------------------
+
+        geom_data_centered, (cx, cy, cz), vertices_centered = recenter_vertices(geom_data)
+        geom_data_centered_final = geom_data_centered
+
+        # Z est maintenant centré dans les vertices → pas de décalage à appliquer
+        decal_z = 0.0
+        decal_z_final = 0.0
+
+        # ------------------------------------------------------------
+        # 7) Reconstruction du 3MF final
+        # ------------------------------------------------------------
+        # tmp_new = base_name + ".new.3mf"
+
+        # ------------------------------------------------------------
+        # CAS QIDISLICER (mono-objet)
+        # ------------------------------------------------------------
+        if slicer_source == "qidislicer":
+            vertices_corrected = inject_geometry_into_qidislicer_3mf(
+                old_3mf,
+                tmp_new,
+                geom_data_centered_final,
+                decal_z_final,
+                ignore_transform
+            )
+
+
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
+            if os.path.exists(fc_3mf):
+                os.remove(fc_3mf)
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_corrected
+
+        # ------------------------------------------------------------
+        # CAS QIDISTUDIO (multi-objets)
+        # ------------------------------------------------------------
+        if slicer_source == "qidistudio":
+
+            with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
+                    zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
+
+                for info in old_zip.infolist():
+                    name = info.filename
+                    data = old_zip.read(name)
+
+                    # 1) Remplacement du mesh dans object_1.model
+                    if name == keep_model:
+                        merged = replace_mesh_in_model_xml(data, geom_data_centered)
+
+                        if ignore_transform:
+                            merged = apply_common_transform_to_3dmodel(
+                                merged, geom_data_centered, ignore_transform
+                            )
+                            merged = force_zmax_in_transform(merged, decal_z)
+
+                        new_zip.writestr(name, merged)
+                        continue
+
+                    # 2) Transform global dans 3dmodel.model
+
+                    if name.endswith("3dmodel.model"):
+
+                        if ignore_transform:
+                            merged = apply_common_transform_to_3dmodel(
+                                data, geom_data_centered, ignore_transform
+                            )
+                            merged = force_zmax_in_transform(merged, decal_z)
+                            new_zip.writestr(name, merged)
+                            continue
+
+                        # Case NON cochée → transform d’origine
+                        new_zip.writestr(name, data)
+                        continue
+
+                    # 3) Suppression des autres objets
+                    if name.startswith("3D/Objects/") and name.endswith(".model"):
+                        continue
+
+                    # 4) Recopie du reste
+                    new_zip.writestr(name, data)
+
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
+            if os.path.exists(fc_3mf):
+                os.remove(fc_3mf)
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_centered
+
+        # ------------------------------------------------------------
+        # CAS SLIC3R / CURA / FREECAD
+        # ------------------------------------------------------------
+        if slicer_source in ("slic3r", "freecad"):
+
+            with zipfile.ZipFile(old_3mf, 'r') as old_zip, \
+                    zipfile.ZipFile(tmp_new, 'w', compression=zipfile.ZIP_DEFLATED) as new_zip:
+
+                for info in old_zip.infolist():
+                    name = info.filename
+                    data = old_zip.read(name)
+
+                    if name.endswith("3dmodel.model"):
+                        merged = replace_mesh_in_model_xml(data, geom_data_centered)
+                        merged = force_zmax_in_transform(merged, decal_z)
+                        new_zip.writestr(name, merged)
+                        continue
+
+                    new_zip.writestr(name, data)
+
+            # Remplacement final
+            gc.collect()
+            time.sleep(0.05)
+            if os.path.exists(fc_3mf):
+                os.remove(fc_3mf)
+            shutil.move(tmp_new, fc_3mf)
+            if os.path.exists(old_3mf):
+                os.remove(old_3mf)
+            if DEBUG: print("✅ Injection faite dans :", os.path.basename(fc_3mf))
+            return "ok", vertices_centered
+    finally:
+        # Nettoyage systématique des fichiers temporaires
+        for tmp in (cleaned_old_3mf, tmp_new):
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                    if DEBUG:
+                        print("🧹 Suppression fichier temporaire :", tmp)
+            except Exception as e:
+                if DEBUG:
+                    print("⚠️ Impossible de supprimer", tmp, ":", e)
+
+def fix_item_ignore_transform(path_3mf, vertices_centered, transform_item,
+                              center_xy=True, x0=None, y0=None, keep_rotation=True):
+    """
+    Corrige le transform du <item> dans le 3MF final.
+
+    - keep_rotation=False  → rotation annulée (matrice identité)
+    - keep_rotation=True   → rotation conservée
+    """
+
+    if DEBUGPIPE:
+        print('Début fix_item_ignore_transform')
+
+    # --- Lire tout le ZIP ---
+    with zipfile.ZipFile(path_3mf, 'r') as zin:
+        contents = {info.filename: zin.read(info.filename) for info in zin.infolist()}
+
+    if "3D/3dmodel.model" not in contents:
+        return
+
+    xml = contents["3D/3dmodel.model"].decode("utf-8", errors="ignore")
+
+    # --- Récupération des vertices ---
+    if vertices_centered:
+        vertices = vertices_centered
+    else:
+        verts = re.findall(
+            r'<vertex[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*z="([^"]+)"',
+            xml
+        )
+        if not verts:
+            print("⚠️ Aucun vertex trouvé → abandon")
+            return
+        vertices = [(float(x), float(y), float(z)) for x, y, z in verts]
+
+    # --- Appliquer la rotation du 3MF aux vertices ---
+    if not transform_item:
+        # Pas de rotation → cas FreeCAD ou 3MF sans transform
+        rotated_z = [z for (_, _, z) in vertices]
+    else:
+        # Rotation réelle du 3MF
+        R = transform_item.R
+        rotated_z = []
+        for (x, y, z) in vertices:
+            zr = R[2][0]*x + R[2][1]*y + R[2][2]*z
+            rotated_z.append(zr)
+
+    # --- min_z basé sur la rotation (ou pas) ---
+    min_z = min(rotated_z)
+
+    # --- Lire transform existant ---
+    m = re.search(r'<item[^>]*transform="([^"]+)"', xml)
+    if m:
+        old_vals = m.group(1).split()
+    else:
+        old_vals = ["1","0","0","0","1","0","0","0","1","0","0","0"]
+
+    # --- XY ---
+    if center_xy:
+        x = x0
+        y = y0
+    else:
+        x = float(old_vals[9])
+        y = float(old_vals[10])
+
+    # --- Z recalculé (objet posé sur le plateau) ---
+    z = -min_z
+
+    # --- Rotation ---
+    if keep_rotation:
+        r = old_vals[:9]
+    else:
+        r = ["1","0","0","0","1","0","0","0","1"]
+
+    new_transform = " ".join(r + [str(x), str(y), str(z)])
+
+    # --- Remplacer dans le XML ---
+
+    if 'transform="' in xml:
+        # Remplacement normal
+        xml_new = re.sub(
+            r'(<item[^>]*transform=")[^"]+(")',
+            lambda m: m.group(1) + new_transform + m.group(2),
+            xml
+        )
+    else:
+        # Aucun transform → on l’ajoute
+        xml_new = re.sub(
+            r'(<item[^>]*)(/?>)',
+            lambda m: f'{m.group(1)} transform="{new_transform}"{m.group(2)}',
+            xml
+        )
+
+    # --- Réécrire le ZIP ---
+    with zipfile.ZipFile(path_3mf, 'w') as zout:
+        for name, data in contents.items():
+            if name == "3D/3dmodel.model":
+                zout.writestr(name, xml_new)
+            else:
+                zout.writestr(name, data)
+
+def extract_transforms_from_3mf(path_3mf: str) -> Transforms3MF:
+    """
+    Extrait tous les transforms présents dans un 3MF :
+    - <component>
+    - <item>
+    - <assemble_item> (si model_settings.config existe)
+
+    Ne crée rien, ne modifie rien, ne touche pas aux namespaces.
+    Stocke None si un transform est absent.
+    """
+    tr = Transforms3MF()
+    if DEBUGPIPE: print('Début extract_transforms_from_3mf')
+
+
+    with zipfile.ZipFile(path_3mf, 'r') as z:
+
+        # ------------------------------------------------------------
+        # 1) Lecture du fichier principal 3D/3dmodel.model
+        # ------------------------------------------------------------
+        with z.open('3D/3dmodel.model') as f:
+            tree = ET.parse(f)
+            root = tree.getroot()
+
+            # Namespace réel
+            tag = root.tag
+            if tag.startswith("{"):
+                ns = tag.split("}")[0][1:]
+            else:
+                ns = ""
+
+            # Fonction utilitaire
+            def q(name):
+                return f".//{{{ns}}}{name}" if ns else f".//{name}"
+
+            # <component>
+            for comp in root.findall(q("component")):
+                t = comp.get("transform")
+                if t is None:
+                    tr.components.append(None)
+                else:
+                    vals = t.split()
+                    if len(vals) != 12:
+                        tr.components.append(None)
+                    else:
+                        tr.components.append(Transform3MF(t))
+
+            # <item>
+            for item in root.findall(q("item")):
+                t = item.get("transform")
+                if t is not None:
+                    tr.items.append(Transform3MF(t))
+                else:
+                    tr.items.append(None)
+
+
+        # ------------------------------------------------------------
+        # 2) Lecture de Metadata/model_settings.config (si présent)
+        # ------------------------------------------------------------
+        if 'Metadata/model_settings.config' in z.namelist():
+            with z.open('Metadata/model_settings.config') as f:
+                tree2 = ET.parse(f)
+                root2 = tree2.getroot()
+
+                for a in root2.findall('.//assemble_item'):
+                    t = a.get("transform")
+                    if t is None:
+                        tr.assemble_items.append(None)
+                    else:
+                        vals = t.split()
+                        if len(vals) != 12:
+                            tr.assemble_items.append(None)
+                        else:
+                            tr.assemble_items.append(Transform3MF(t))
+
+    if DEBUG: print("DEBUG extract_transforms_from_3mf: nombre d’items =", len(tr.items))
+
+    return tr
+
+def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
+    """
+    Lance le slicer si demandé par l’utilisateur.
+    - Vérifie l’existence du chemin ou si c'est un commande valide
+    - Ouvre le slicer avec le fichier 3MF
+    - Sinon affiche un message de fin
+
+    Ne retourne rien.
+    """
+    if DEBUGPIPE: print('Lancement du slicer', slicer_path)
+    # Lancement demandé ?
+    if launch_slicer:
+        try:
+            time.sleep(0.2)  # petit délai pour éviter les conflits disque
+            if slicer_path and is_valid_slicer_entry(slicer_path):
+                cmd = build_slicer_launch_command(slicer_path, fc_3mf)
+                subprocess.Popen(cmd)
+            elif slicer_path:
+                show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
+                return
+        except Exception as e:
+            show_message(tr("error_title"), f"{tr('error_launch_slicer')} {e}")
+        return
+
+    # Si l’utilisateur n’a pas demandé le lancement
+    if not launch_slicer:
+        show_message(tr("info_title"), tr("info_done"))
+
+def run_extra_commands(extra_cmds, project_path):
+    """
+    Exécute les commandes externes définies par l’utilisateur.
+    project_path = chemin complet du projet FreeCAD, AVEC extension (.FCStd)
+    """
+
+    if DEBUG:
+        print('Lancement commandes utilisateur')
+
+    # On enlève l’extension pour obtenir la base
+    project_basepath = os.path.splitext(project_path)[0]
+    # Dossier du projet
+    project_dir = os.path.dirname(project_basepath)
+    # Nom du projet sans extension
+    project_name = os.path.basename(project_basepath)
+
+    for checked, cmd, delay in extra_cmds:
+        if not checked:
+            continue
+
+        # Substitution minimale
+        # cmd est une LISTE → on remplace dans chaque élément
+        cmd = [
+            part.replace("%PROJECT%", project_basepath)
+                .replace("%PROJECTDIR%", project_dir)
+                .replace("%PROJECTNAME%", project_name)
+            for part in cmd
+        ]
+
+        try:
+            if delay > 0:
+                time.sleep(delay)
+
+            subprocess.Popen(cmd)
+
+        except Exception as e:
+            show_message(tr("error_title"), f"{tr('error_external_cmd')} {e}")
+
+# -----------------------------------------------------------------------------
+# Routine principale : exporte la sélection en 3MF/STL, injecte géométrie,
+# lance slicer et commandes externes
+# ----------------------------------------------------------------------------
+def export_replace_geometry():
+    global global_origin_x, global_origin_y, global_origin_z
+    print("_________________________________")
+    print('\n\n>>> MACRO 3D_printer_3mf_workflow <<<')
+
+    # ------------------------------------------------------------
+    # 1) Préparation de l’environnement
+    # ------------------------------------------------------------
+    env = prepare_environment()
+    if env is None:
+        return
+
+    (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start) = env
+
+    """
+    # ------------------------------------------------------------
+    # Création du fichier source immuable (option 1 : diagnostic)
+    # ------------------------------------------------------------
+    source_3mf = base_name + ".source.3mf"
+
+    # On crée le fichier source immuable une seule fois
+    if fc_3mf_existed_at_start and not os.path.exists(source_3mf):
+        try:
+            shutil.copy(fc_3mf, source_3mf)
+            if DEBUG:
+                print("Création du fichier source immuable :", source_3mf)
+        except Exception as e:
+            if DEBUG:
+                print("Impossible de créer le 3MF source immuable :", e)
+
+    """
+    # ------------------------------------------------------------
+    # 2) Vérification de la sélection
+    # ------------------------------------------------------------
+    selection = get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
+    if selection is None:
+        return
+
+    # ------------------------------------------------------------
+    # 3) Préférences utilisateur
+    # ------------------------------------------------------------
+    opts = get_user_options(cfg)
+    if opts is None:
+        return
+
+    (generate_stl,
+     slicer_path, base3mf_path, launch_slicer,
+     linear_value, angular_value, reset_all, ignore_transform, extra_cmds) = opts
+
+    # Reset complet
+    if reset_all:
+        if fc_3mf and os.path.exists(fc_3mf):
+            if DEBUG:
+                print('Suppression', os.path.basename(fc_3mf))
+            os.remove(fc_3mf)
+
+        show_message(tr("reset_title"), tr("reset_message"))
+        macro_path = __file__
+        exec(open(macro_path, "r", encoding="utf-8").read())
+        return
+
+    # ------------------------------------------------------------
+    # 4) Si l’utilisateur a choisi un 3MF de base, on le copie sur fc_3mf
+    # ------------------------------------------------------------
+    if base3mf_path and os.path.exists(base3mf_path):
+        try:
+            if os.path.exists(fc_3mf) and os.path.samefile(base3mf_path, fc_3mf):
+                if DEBUG:
+                    print("Le fichier 3MF de base est identique au fichier de travail, aucune copie nécessaire.")
+            else:
+                shutil.copy(base3mf_path, fc_3mf)
+                if DEBUG:
+                    print("Copie du fichier 3MF de base :", os.path.basename(base3mf_path),
+                          "vers", os.path.basename(fc_3mf))
+        except Exception as e:
+            if DEBUG:
+                print("Erreur lors de la copie du 3MF de base :", e)
+
+    # ------------------------------------------------------------
+    # 5) Slicer source / cible
+    # ------------------------------------------------------------
+    slicer_source = nameSlicer(fc_3mf)
+    slicer_target = detect_slicer_target_from_path(slicer_path) if slicer_path else None
+    if DEBUG:
+        print('Slicer source par analyse du contenu de (fc_3mf)', os.path.basename(fc_3mf), slicer_source)
+        print('Slicer cible par analyse du nom de l\'exe ', os.path.basename(slicer_path), slicer_target)
+        print("DEBUG base3mf_path =", base3mf_path)
+        print("DEBUG fc_3mf =", fc_3mf)
+
+    # ------------------------------------------------------------
+    # 6) Plateau vide ?
+    # ------------------------------------------------------------
+    if not handle_empty_plate(fc_3mf_existed_at_start, old_3mf_backup, fc_3mf):
+        return
+
+    # ------------------------------------------------------------
+    # 7) Rotation des backups
+    # ------------------------------------------------------------
+    rotate_old_backups(base_name, MAX_OLD_BACKUPS)
+
+    # ------------------------------------------------------------
+    # 8) Sauvegarde de l’ancien 3MF officiel
+    # ------------------------------------------------------------
+    if fc_3mf_existed_at_start and os.path.exists(fc_3mf):
+        shutil.copy(fc_3mf, old_3mf_backup)
+        if DEBUG:
+            print('Copie de fc_3mf', os.path.basename(fc_3mf), 'vers old_3mf_backup',
+                  os.path.basename(old_3mf_backup))
+
+    # Récupération des coordonnées, dans le globaln de l'origine
+    global_origin_x, global_origin_y, global_origin_z = origin_in_3mf(fc_3mf)
+
+
+    # ------------------------------------------------------------
+    # 9) Export FreeCAD → 3MF (dans fc_3mf, comme avant)
+    # ------------------------------------------------------------
+    if DEBUGPIPE: print('Début export 3mf par FreeCAD', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    if not export_freecad_files(selection, base_name, fc_3mf, generate_stl,
+                                linear_value, angular_value,
+                                fc_3mf_existed_at_start, old_3mf_backup):
+        return
+    if DEBUGPIPE: print('Fin export 3mf par FreeCAD', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+    # ------------------------------------------------------------
+    # 10) Injection géométrie dans le 3MF Qidi
+    # ------------------------------------------------------------
+    if DEBUG:
+        print("Dans export_replace_geometry : >>> Avant inject_geometry, fichier =", fc_3mf)
+    if DEBUGPIPE: print('Début inject_geometry', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    status, vertices_centered = inject_geometry_if_possible(
+        base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start,
+        slicer_path, ignore_transform
+    )
+    if DEBUGPIPE: print('Fin inject_geometry', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+
+    if status == 'cancel':
+        return
+
+
+
+    # ------------------------------------------------------------
+    # 12 + 13) Transforms UNIQUEMENT si injection OK
+    # ------------------------------------------------------------
+    if status == "ok":
+
+        # 12) Lecture de la position APRÈS injection (dans fc_3mf)
+        tr_fc = extract_transforms_from_3mf(fc_3mf)
+        x03mf = tr_fc.items[0].x
+        y03mf = tr_fc.items[0].y
+        z03mf = tr_fc.items[0].z
+
+        if DEBUG:
+            print("Position après injection :", x03mf, y03mf, z03mf)
+
+
+        # ------------------------------------------------------------
+        # 13) Recentrage / repositionnement
+        # ------------------------------------------------------------
+        # on réutilise la position lue après injection
+        transf = extract_transforms_from_3mf(fc_3mf)
+
+        apply_saved_transforms_to_3mf(
+            fc_3mf,
+            transf,
+            vertices_centered,
+            center=False, #############True modifié le 2025/02/08 14:28 ###############################################################
+            cancel_rotation=False,
+            x0=x03mf,
+            y0=y03mf
+        )
+
+
+
+    # ------------------------------------------------------------
+    # 13) Fichier final pour le slicer
+    #     (fc_3mf est déjà le bon fichier, on peut le recopier si besoin)
+    # ------------------------------------------------------------
+    final_3mf = fc_3mf
+    if DEBUG:
+        print("📦 Fichier final généré pour le slicer :", final_3mf)
+
+    # ------------------------------------------------------------
+    # Modifications item transform si ignore_transform
+    # ------------------------------------------------------------
+
+    # --- Déterminer transform_item proprement ---
+    try:
+        # Cas normal : transform extrait
+        transform_item = transf.items[0]
+    except Exception:
+        # Cas FreeCAD ou injection impossible : pas de transform
+        transform_item = None
+
+
+    if DEBUG: print('global_origin_x = ',global_origin_x)
+
+    # Centrer si demandé
+    if ignore_transform or transform_item is None:
+        # Centrage XY + recalcul Z
+        fix_item_ignore_transform(
+            fc_3mf,
+            vertices_centered,
+            transform_item=transform_item,
+            center_xy=True,
+            x0=PLATEAU_X / 2 - global_origin_x,
+            y0=PLATEAU_Y / 2 - global_origin_y,
+            keep_rotation=False
+        )
+
+    else:
+        # Recalcul Z uniquement (pas de centrage XY)
+        fix_item_ignore_transform(
+            fc_3mf,
+            vertices_centered,
+            transform_item=transform_item,
+            center_xy=False
+        )
+
+
+    # ------------------------------------------------------------
+    # 14) Lancement du slicer
+    # ------------------------------------------------------------
+    if DEBUGPIPE: print('Lancement du slicer', datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    launch_slicer_if_needed(slicer_path, launch_slicer, final_3mf)
+
+    # ------------------------------------------------------------
+    # 15) Commandes externes
+    # ------------------------------------------------------------
+    doc = FreeCAD.ActiveDocument
+    project_path = doc.FileName
+    run_extra_commands(extra_cmds, project_path)
+
+
+export_replace_geometry()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if False:
+
+    import traceback
+    import inspect
+    import ast
+
+    def _debug_list_functions():
+        print("\n=== LISTE DES FONCTIONS DANS LA MACRO ===")
+        for name, obj in globals().items():
+            if inspect.isfunction(obj):
+                print(name)
+        print("=== FIN DE LISTE ===\n")
+
+    _debug_list_functions()
+
+
+
+    def _debug_find_unused_functions(path):
+        with open(path, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+
+        # 1) Récupérer toutes les fonctions définies dans le fichier
+        defined_funcs = set()
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                defined_funcs.add(node.name)
+
+        # 2) Récupérer tous les appels de fonctions dans le fichier
+        called_funcs = set()
+        class CallVisitor(ast.NodeVisitor):
+            def visit_Call(self, node):
+                if isinstance(node.func, ast.Name):
+                    called_funcs.add(node.func.id)
+                self.generic_visit(node)
+
+        CallVisitor().visit(tree)
+
+        # 3) Fonctions définies mais jamais appelées
+        unused = sorted(defined_funcs - called_funcs)
+
+        print("\n=== FONCTIONS DÉFINIES MAIS JAMAIS APPELÉES ===")
+        for name in unused:
+            print("  -", name)
+        print("=== FIN ===\n")
+
+    # Lancer l’analyse
+    _debug_find_unused_functions(__file__)#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# ===========================================================================
+# File name : 3D_Printer_3mf_workflow.FCMacro
+# ===========================================================================
+# FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings,
+# with automatic workflow to your preferred slicer.
+#
+# This macro automates and enhances the 3D printing workflow from FreeCAD to your slicer by:
+# • Generating smooth 3D prints without visible facets
+# • Preserving print settings (temperature, supports, speed…) directly within the FreeCAD project
+# • Launching external programs to streamline the full pipeline:
+# Use https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro
+# to add external programs
+__Name__ = "3D_Printer_3mf_workflow"
+__Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
+__Author__ = "2cv001"
+__Title__ = "Macro 3D Printer 3mf workflow"
 __Date__ = "2026/04/17 16:27"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
