@@ -136,12 +136,16 @@ This feature is optional and can be used to automate additional steps in your wo
 A dedicated helper macro is provided to make configuration easy. Your commands are stored in an .ini file used by the workflow.
 
 The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro).
+<img width="781" height="392" alt="Capture d&#39;écran 2026-08-02 090716" src="https://github.com/user-attachments/assets/a64e6207-99c8-46d0-9867-a40d6bd87e70" />
+
 
  • Fill in the fields in the configuration window
  
  • Hover your mouse over a column title to display help tooltips
  
  • Each command you define will be executed in order after the 3MF file is produced.
+ <img width="897" height="528" alt="Capture d&#39;écran 2026-08-02 085921" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
+
  
 ## Using %PROJECT%, %PROJECTDIR%, and %PROJECTNAME% in user commands
 When you define custom post‑processing commands in the workflow, you can use three special placeholders.
