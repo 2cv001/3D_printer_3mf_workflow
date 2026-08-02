@@ -72,8 +72,6 @@ Without visible facets
 
 ## Technical Notes
 
-    • The macro modifies ViewObject.Deviation and ViewObject.Angle before export 
-    
     • .3mf files are used instead of .stl to retain print metadata 
     
     • Compatible with most slicers that support .3mf: Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, etc. 
