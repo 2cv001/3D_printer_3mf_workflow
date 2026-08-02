@@ -87,14 +87,14 @@ Without visible facets
 
 
 ## Installation and use
+    he best way to install the macro is to use the addon manager in Freecad. Then:
 
-    1. Copy the macro to your FreeCAD macros folder 
+       
+    - Run the macro from FreeCAD.  The slicer path is set directly in the macro’s main dialog, using the dedicated input field.
     
-    3. Run the macro from FreeCAD.  The slicer path is set directly in the macro’s main dialog, using the dedicated input field.
+    - On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or “Save” in the menu).
     
-    4. On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or “Save” in the menu).
-    
-    5. On next launches, enjoy automatic reuse of your settings 
+    - On next launches, enjoy automatic reuse of your settings 
 
 
 
