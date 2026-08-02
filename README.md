@@ -87,14 +87,16 @@ Without visible facets
 
 
 ## Installation and use
-    he best way to install the macro is to use the addon manager in Freecad. Then:
+The best way to install the macro is to use the addon manager in Freecad. Then:
 
        
-    - Run the macro from FreeCAD.  The slicer path is set directly in the macro’s main dialog, using the dedicated input field.
+- Run the macro from FreeCAD.  The slicer path is set directly in the macro’s main dialog, using the dedicated input field.
+
+  - (Linux only) When the Slicer is installed via flatpak, enter flatpak run <slicerID> e.g. flatpak run com.prusa3d.PrusaSlicer
     
-    - On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or “Save” in the menu).
+- On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or “Save” in the menu).
     
-    - On next launches, enjoy automatic reuse of your settings 
+- On next launches, enjoy automatic reuse of your settings 
 
 
 
