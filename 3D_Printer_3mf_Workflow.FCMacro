@@ -364,7 +364,100 @@ TRANSLATIONS = {
         "dependency_download_error": "Unable to download the macro:",
 
 
-    }
+    },
+
+    "de": {
+        # Titles
+        "error_title": "Fehler",
+        "warn_title": "Warnung",
+        "info_title": "Info",
+
+        # Buttons
+        "btn_delete": "Ok",
+        "btn_cancel": "Abbrechen",
+
+        # UI options
+        "options_title": "Export Optionen für QidiStudio",
+        "keep_positions": "Positionen auf dem Druckbett beibehalten",
+        "generate_stl": "Generiere eine STL zusätzlich zu der 3MF",
+        "launch_slicer": "Startbefehl Slicer",
+        "browse": "Durchsuchen…",
+        "linear_label": "Genauigkeit (LinearDeflection). Zwischen 0.01 und 10. Höchste Qualität: 0.01",
+        "angular_label": "Winkeltoleranz (AngularDeflection) (z.B. 3)",
+        "external_actions": "Weitere Aktionen vor dem Schließen ausführen:",
+        "ignore_transform": "Position/Rotation des Slicers nicht wiederherstellen",
+        "base3mf_label": "3MF Datei für Druckparameter:",
+        "base3mf_dialog_title": "Wähle eine 3MF Datei für Druckparameter",
+        "base3mf_filter": "3MF Dateien (*.3mf)",
+        "select_3mf_placeholder": "Wähle eine .3mf Datei",
+        "hint_base3mf": "Optional: Ermöglicht die Nutzung der Druckerparameter einer anderen 3MF Datei."
+                        "\nStandardmäßig wird die projekteigene 3MF Datei genutzt.",
+
+        # Error / warning messages
+        "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
+        "error_no_save": "❌ Das Projekt wurde noch nicht gespeichert.",
+        "warn_no_selection": "⚠️ Kein Objekt ist ausgewählt.",
+        "warn_multi_selection": "⚠️ Die Auswahl von mehreren Objekten wird nicht unterstützt.",
+        "error_write_ini": "❌ Die ini Datei konnte nicht beschrieben werden:",
+        "error_export_3mf": "❌ Während dem 3MF Export ist ein Fehler aufgetreten:",
+        "error_generate_stl": "❌ Während der STL Generierung ist ein Fehler aufgetreten:",
+        "error_create_3mf": "❌ Während der finalen 3MF Erstellung ist ein Fehler aufgetreten:",
+        "error_replace_3mf": "❌ Die 3MF Datei konnte nicht ersetzt werden:",
+        "error_launch_slicer": "❌ Der Slicer konnte nicht gestartet werden:",
+        "error_external_cmd": "❌ Ein externer Befehl konnte nicht ausgeführt werden:",
+        "error_no_geom": "❌ Es wurde keine Geometrie-Datei in der exportierten 3MF Datei gefunden.",
+        "error_invalid_slicer": "❌ Ungültiger Slicer Pfad:",
+        "warn_no_geom_vertices": "Das ausgewählte Objekt enthält keine verwendbare 3D-Geometrie (z. B. eine Skizze).",
+        "warn_incompatible_slicer_dialog":
+            "Die ursprüngliche 3MF Datei wurde erstellt von: {source}\n"
+            "Der ausgewählte Ziel-Slicer ist:              {target}\n\n"
+            "Diese Slicer sind nicht identisch.\n"
+            "Fortfahren und die 3MF Datei löschen, ohne die Druckeinstellungen zu übernehmen?\n\n",
+        "warn_empty_plate":
+            "⚠️ Die 3MF Datei des Slicers enthält keine Objekte und kann nicht als Basis verwendet werden.\n"
+            "Dies passiert häufig nach dem Löschen von Objekten im Slicer.\n\n"
+            "Was möchten Sie tun?\n\n"
+            "• Die vorherige 3MF Datei des Slicers wiederherstellen\n"
+            "• Die von FreeCAD exportierte 3MF Datei löschen und ein neues Projekt starten\n"
+            "• Abbrechen",
+        "warn_empty_plate_title": "Leeres Druckbett",
+        "btn_restore_old_3mf": "Vorherige 3MF wiederherstellen",
+        "btn_reset_new_project": "Neues Projekt starten",
+
+        # Infos
+        "info_done": "✅ Export abgeschlossen. Der Slicer wurde nicht gestartet (Option nicht aktiviert).",
+        "info_export_fc": "✅ Datei wurde ausschließlich von FreeCAD erzeugt:",
+        "info_export_slicer": "✅ Export mit übernommenen Slicer-Einstellungen:",
+        "reset_all": "Von vorne beginnen (alles verwerfen)",
+        "hint_reset_all": "Löscht die vorhandene 3MF Datei und startet das Makro mit einem neuen, leeren Projekt neu.",
+        "reset_title": "Zurücksetzen",
+        "reset_message": "Die vorhandene 3MF Datei wurde gelöscht.\nDas Makro wird neu gestartet, um mit einem leeren Projekt zu beginnen.",
+
+        # Tooltips
+        "hint_linear": "Kleinerer Wert = feineres Netz.\nBeispiel: 0.01 = hohe Qualität, aber große Datei.\n"
+                        "Beispiel: 0.1 = geeignet für einen gewöhnlichen FDM-Drucker.",
+        "hint_angular": "Winkeltoleranz in Grad.\nKleinerer Wert = mehr Details, aber größere Datei.",
+        "hint_positions": "Behält die XY-Position auf dem Druckbett bei.\n⚠️ Die Z-Position wird immer neu berechnet, "
+                            "damit das Objekt nicht unter das Druckbett fällt.",
+        "no_external_actions": "Es wurden noch keine benutzerdefinierten Befehle hinzugefügt.",
+        "hint_external_actions": "Sie können Ihre eigenen Aktionen über die Schaltfläche ⚙️ hinzufügen oder bearbeiten.",
+
+        "hint_generate_stl": "Erzeugt zusätzlich zur 3MF auch eine STL Datei.",
+        "hint_launch_slicer": "Startet den Slicer automatisch nach dem Export, sofern der Pfad gültig ist.",
+        "ini_file_label": "INI Datei:",
+        "hint_ignore_transform": "Wenn aktiviert, werden die XY-Position und Rotation des Slicers nicht übernommen.\n"
+                                    "Das Objekt wird aufrecht und zentriert auf dem Druckbett platziert.",
+
+        "dependency_missing_title": "Fehlendes Makro",
+        "dependency_missing_msg": "Das benötigte Makro <b>{filename}</b> fehlt.",
+        "dependency_download": "Hier herunterladen:",
+        "dependency_copy_to": "Anschließend in diesen Ordner kopieren:",
+        "dependency_auto_download": "Automatisch herunterladen",
+        "dependency_ok": "OK",
+        "dependency_download_success": "Das Makro wurde heruntergeladen nach:",
+        "dependency_download_error": "Das Makro konnte nicht heruntergeladen werden:",
+
+        }
 }
 
 # Détermine la langue de l’utilisateur à partir de FreeCADGui
@@ -376,9 +469,9 @@ def get_user_language():
             return "fr"
         if locale.startswith("en") or "english" in locale:
             return "en"
-        '''
         if locale.startswith("de") or "german" in locale:
             return "de"
+        '''
         if locale.startswith("es") or "spanish" in locale:
             return "es"
         if locale.startswith("it") or "italian" in locale:
