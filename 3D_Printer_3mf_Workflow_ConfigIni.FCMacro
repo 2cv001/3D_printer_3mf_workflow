@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os, sys, configparser, ast
 from PySide import QtGui, QtCore
@@ -60,6 +61,31 @@ TRANSLATIONS = {
         "tooltip_cmd": "Program + arguments, e.g. calc.exe or curl https://... --insecure",
         "tooltip_label": "Text displayed to the user",
         "tooltip_delay": "Waiting time before execution"
+    },
+    "de": {
+        "dialog_title": "Nutzerprogramme",
+        "col_command": "Befehl",
+        "col_label": "Label",
+        "col_delay": "Verzögerung (s)",
+        "col_default": "Standardmäßig Aktiviert",
+        "hint_command": (
+            "<b>Befehl zum Ausführen:</b><br>"
+            "Einfaches Beispiel: calc.exe<br>"
+            "Beispiel mit Parametern: curl https://myserver/api --insecure<br>"
+            "HTTP Anfrage mit Parametern: curl -X POST https://domotics/api "
+            "-d 'apikey=12345&action=on'<br>"
+            "Shelly Gen2 Beispiel: curl -u admin:password --insecure "
+            "http://ShellyDeviceIP/rpc/Switch.Set?id=0&on=true"
+        ),
+        "hint_label": "Name des Programmes",
+        "hint_delay": "Verzögerung in Sekunden vor der Ausführung",
+        "hint_default": "Wenn aktiviert, wird der Befehl standardmäßig ausgeführt",
+        "btn_add": "Hinzufügen",
+        "btn_del": "Löschen",
+        "new_program": "Neues Programm",
+        "tooltip_cmd": "Programm + Argumente, z.B. calc.exe oder curl https://... --insecure",
+        "tooltip_label": "Anzeigetext für den Nutzer",
+        "tooltip_delay": "Verzögerungszeit bis zur Ausführung"
     }
 }
 
@@ -68,10 +94,22 @@ TRANSLATIONS = {
 def get_user_language():
     try:
         locale = FreeCADGui.getLocale().lower()
-        if locale.startswith("fr"):
+        # Normalisation
+        if locale.startswith("fr") or "french" in locale:
             return "fr"
+        if locale.startswith("en") or "english" in locale:
+            return "en"
+        if locale.startswith("de") or "german" in locale:
+            return "de"
+        '''
+        if locale.startswith("es") or "spanish" in locale:
+            return "es"
+        if locale.startswith("it") or "italian" in locale:
+            return "it"
+        '''
+        # Fallback
         return "en"
-    except:
+    except Exception:
         return "en"
 
 def tr(key):
