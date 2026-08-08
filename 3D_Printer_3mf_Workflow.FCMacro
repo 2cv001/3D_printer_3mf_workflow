@@ -12,6 +12,36 @@
 # • Launching external programs to streamline the full pipeline:
 # Use https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro
 # to add external programs
+
+
+#tests effectués le 07/08/2026
+# superslicer (famille qidislicer)
+    # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
+    # mémorisation déplacement de l'objet ok
+    # mémorisation paramètre impression ok
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 ok
+# orcaslicer (famille qidistudio)
+    # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
+    # mémorisation déplacement de l'objet ok
+    # mémorisation paramètre impression ok
+    # mémorisation paramètre impression ok
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 pas ok plateau vide (à traiter)
+# qidistudio (famille qidistudio)
+    # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
+    # mémorisation déplacement de l'objet ok
+    # mémorisation paramètre impression ok
+    # mémorisation paramètre impression ok
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 pas ok plateau vide
+
+# qidislicer (famille qidislicer)
+    # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
+    # mémorisation déplacement de l'objet ok
+    # mémorisation paramètre impression ok
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 ok
+
+
+
+
 __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
@@ -1058,7 +1088,7 @@ def get_user_options(cfg):
 ##############################################################
 # Fonctions analyse extraction 3MF
 ##############################################################
-
+# détecte le slicer qui a créé le 3MF
 def detect_slicer_target_from_path(path):
     if not path:
         return None
@@ -1073,17 +1103,23 @@ def detect_slicer_target_from_path(path):
     if any(x in p for x in ("qidistudio", "orca", "bambu", "creality")):
         return "qidistudio"
 
-    # # Prusa / SuperSlicer (multi-objets standard Slic3r)
-
+    # PrusaSlicer mais problème du non chargement des fichiers donnés en paramètre
+    # A tester : l'assimiler à qidislicer
     if any(x in p for x in (
             "prusa",
+    )):
+        ##########################################return "slic3r"
+        return "qidislicer"
+
+    if any(x in p for x in (
+            #"prusa",
             "super",
             "superslicer",
             "anycubic",
             "flashprint",
             "ideamaker",
             "raise3d",
-            "orca",
+            #"orca",
     )):
         #return "slic3r"
         return "qidislicer"
@@ -1449,6 +1485,7 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
     # Normalisation du nom du logiciel
     # ------------------------------------------------------------
     def normaliser_logiciel(nom: str) -> str:
+        print('1487 nom ',nom )
         if not nom:
             return "Inconnu"
         txt = nom.strip()
@@ -1467,7 +1504,9 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
             "superslicer": "qidislicer",
 
             # Prusa-like (Slic3r family)
-            "prusaslicer": "slic3r",
+            ##########################"""prusaslicer": "slic3r",
+            "prusaslicer": "qidislicer",
+            "prusa-slicer": "qidislicer",
             #"superslicer": "slic3r",
             "anycubic": "slic3r",  # Anycubic Slicer = fork Prusa
             "flashprint": "slic3r",  # FlashPrint 5 = structure Prusa-like
@@ -3239,17 +3278,6 @@ def export_replace_geometry():
 
 
 export_replace_geometry()
-
-
-
-
-
-
-
-
-
-
-
 
 
 
