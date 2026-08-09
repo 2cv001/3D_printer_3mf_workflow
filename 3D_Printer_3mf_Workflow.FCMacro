@@ -1824,7 +1824,7 @@ def correct_item_transform_z(model_data_centered, transform_str):
     new_values = [a, b, c, d, e, f, g, h, i, tx, ty, tz_corrected]
     return " ".join(f"{v:.6f}" for v in new_values)
 
-def clean_multi_object_style(src_3mf, dst_3mf):
+def convert_qidislicer_to_singleobject(src_3mf, dst_3mf):
     """
     Nettoyage CHIRURGICAL d'un 3MF QidiStudio.
     Version corrigée + PATCH chemins :
@@ -1836,9 +1836,9 @@ def clean_multi_object_style(src_3mf, dst_3mf):
     - Nettoyage complet de Metadata/model_settings.config
     """
 
-    if DEBUG: print("\n=== clean_multi_object_style ===")
+    if DEBUG: print("\n=== convert_qidislicer_to_singleobject ===")
     if not os.path.exists(src_3mf):
-        if DEBUG: print(' dans clean_multi_object_style fichier src_3mf inexistant', src_3mf)
+        if DEBUG: print(' dans convert_qidislicer_to_singleobject fichier src_3mf inexistant', src_3mf)
 
     rels_path = "3D/_rels/3dmodel.model.rels"
     config_path = "Metadata/model_settings.config"
@@ -2628,7 +2628,7 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
         keep_object_id = None
 
         if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
-            keep_object_id, keep_model = clean_multi_object_style(
+            keep_object_id, keep_model = convert_qidislicer_to_singleobject(
                 old_3mf_backup, cleaned_old_3mf
             )
         else:
