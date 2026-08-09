@@ -25,13 +25,13 @@
     # mémorisation déplacement de l'objet ok
     # mémorisation paramètre impression ok
     # mémorisation paramètre impression ok
-    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 pas ok plateau vide (à traiter)
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 ok
 # qidistudio (famille qidistudio)
     # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
     # mémorisation déplacement de l'objet ok
     # mémorisation paramètre impression ok
     # mémorisation paramètre impression ok
-    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 pas ok plateau vide
+    # copier l'objet pour en avoir 2 sur le plateau les retire sauf 1 ok
 
 # qidislicer (famille qidislicer)
     # lancement 1° 2° sans sauver la première, et fois suivantes en sauvant ok
@@ -61,6 +61,8 @@ from typing import Dict, Optional
 import gc
 import tempfile
 import urllib.request
+import shutil
+
 
 
 
@@ -1824,7 +1826,270 @@ def correct_item_transform_z(model_data_centered, transform_str):
     new_values = [a, b, c, d, e, f, g, h, i, tx, ty, tz_corrected]
     return " ".join(f"{v:.6f}" for v in new_values)
 
-def clean_multi_object_style(src_3mf, dst_3mf):
+# ------------------------------------------------------------
+# Converti un fichier 3mf type qidistudio multi Objet en
+# fichier 3mf mono objet
+# ------------------------------------------------------------
+def convert_qidistudio_to_singleobject(input_path, output_path=None):
+    print("DEBUG: Nettoyage QIDI 3MF (mono-objet, texte brut)")
+
+    if output_path is None:
+        output_path = input_path
+
+    tmp_output = output_path + ".tmp"
+
+    # ------------------------------------------------------------
+    # Fonction de nettoyage du fichier Metadata/model_settings.config
+    # ------------------------------------------------------------
+    def clean_model_settings(settings_xml, correct_wrapper_id):
+
+        # 1. Nettoyage des <object id="X">
+        # Ne conserve que le wrapper correspondant au mesh réel dans le fichier
+        # Metadata/model_settings.config
+        settings_xml = re.sub(
+            r'<object id="(\d+)">[\s\S]*?</object>',
+            lambda m: m.group(0) if m.group(1) == correct_wrapper_id else "",
+            settings_xml
+        )
+
+        # 2. Nettoyage des <model_instance> basés sur metadata interne
+        # Ne conserve que l'instance associée au wrapper réel (object_id == correct_wrapper_id)
+        # dans Metadata/model_settings.config
+        settings_xml = re.sub(
+            r'<model_instance>[\s\S]*?<metadata key="object_id" value="(\d+)"[\s\S]*?</model_instance>',
+            lambda m: m.group(0) if m.group(1) == correct_wrapper_id else "",
+            settings_xml
+        )
+
+        # 3. Nettoyage des <assemble_item object_id="X" ... />
+        # Supprime tous les assemble_item fantômes et ne garde que celui
+        # dont object_id == correct_wrapper_id dans Metadata/model_settings.config
+        settings_xml = re.sub(
+            r'<assemble_item[^>]*object_id="(\d+)"[^>]*/>',
+            lambda m: m.group(0) if m.group(1) == correct_wrapper_id else "",
+            settings_xml
+        )
+
+        return settings_xml
+
+
+
+
+    # ------------------------------------------------------------
+    # 1. Lire le ZIP source
+    # ------------------------------------------------------------
+    # ------------------------------------------------------------
+    # 1. Lire le ZIP source
+    # ------------------------------------------------------------
+    with zipfile.ZipFile(input_path, 'r') as zin:
+
+        filelist = zin.namelist()
+
+        # ------------------------------------------------------------
+        # Ultra-safe : vérifier la présence des fichiers QIDIStudio
+        # ------------------------------------------------------------
+
+        required_files = [
+            "3D/3dmodel.model",
+            "3D/_rels/3dmodel.model.rels",
+            "Metadata/model_settings.config"
+        ]
+
+        for f in required_files:
+            if f not in filelist:
+                print(f"DEBUG: Fichier manquant ({f}) → fichier non-QIDIStudio → aucune modification.")
+                return
+
+        # Vérifier qu'il y a au moins un fichier mesh dans 3D/Objects/
+        object_models = [
+            f for f in filelist
+            if f.startswith("3D/Objects/") and f.endswith(".model")
+        ]
+
+        if not object_models:
+            print("DEBUG: Aucun fichier 3D/Objects/*.model → fichier non-QIDIStudio → aucune modification.")
+            return
+
+        # ------------------------------------------------------------
+        # Maintenant que tout est validé, on peut lire les fichiers SANS RISQUE
+        # ------------------------------------------------------------
+
+        model_xml = zin.read("3D/3dmodel.model").decode("utf-8")
+        rels_xml = zin.read("3D/_rels/3dmodel.model.rels").decode("utf-8")
+        raw_settings_xml = zin.read("Metadata/model_settings.config").decode("utf-8")
+
+        objects_models = {
+            f: zin.read(f).decode("utf-8")
+            for f in object_models
+        }
+
+    # ------------------------------------------------------------
+    # 2. Détection automatique du mesh réel
+    # ------------------------------------------------------------
+    mesh_file = None
+    mesh_id = None
+
+    for filename in sorted(objects_models.keys()):
+        xml = objects_models[filename]
+        if "<mesh>" in xml:
+            mesh_file = filename
+            m = re.search(r'<object[^>]*id="(\d+)"', xml)
+            if m:
+                mesh_id = m.group(1)
+            break
+
+    if mesh_file is None:
+        print("ERREUR: Aucun mesh trouvé.")
+        return
+
+    print("DEBUG: Mesh réel =", mesh_file, "id =", mesh_id)
+
+    # ------------------------------------------------------------
+    # 3. Trouver les wrappers
+    # ------------------------------------------------------------
+    wrappers = re.findall(
+        r'(<object[^>]*id="(\d+)"[\s\S]*?</object>)',
+        model_xml
+    )
+
+    correct_wrapper_id = None
+    correct_wrapper_block = None
+
+    for block, obj_id in wrappers:
+        if mesh_file in block:
+            correct_wrapper_id = obj_id
+            correct_wrapper_block = block
+            break
+
+    if correct_wrapper_id is None:
+        print("ERREUR: Aucun wrapper ne pointe vers le mesh.")
+        return
+
+    print("DEBUG: Wrapper correct id =", correct_wrapper_id)
+
+    # ------------------------------------------------------------
+    # 5. Trouver les items dans <build>
+    # ------------------------------------------------------------
+    items = re.findall(
+        r'(<item[^>]*objectid="(\d+)"[\s\S]*?/>)',
+        model_xml
+    )
+
+    # ------------------------------------------------------------
+    # Détection du cas mono-objet (simple)
+    # ------------------------------------------------------------
+    if len(wrappers) == 1 and len(items) == 1:
+        print("DEBUG: Fichier déjà mono-objet → aucune modification.")
+        return
+
+    # ------------------------------------------------------------
+    # 4. Nettoyage de model_settings.config (déplacé après la détection)
+    # ------------------------------------------------------------
+    settings_xml = clean_model_settings(raw_settings_xml, correct_wrapper_id)
+
+    # ------------------------------------------------------------
+    # 5B. Trouver l'item correct (une seule fois)
+    # ------------------------------------------------------------
+    correct_item_block = None
+    for block, obj_id in items:
+        if obj_id == correct_wrapper_id:
+            correct_item_block = block
+            break
+
+    if correct_item_block is None:
+        print("ERREUR: Aucun item ne pointe vers le wrapper correct.")
+        return
+
+    # ------------------------------------------------------------
+    # 5C. Synchronisation des positions
+    # ------------------------------------------------------------
+    m = re.search(r'transform="([^"]+)"', correct_item_block)
+    item_transform = m.group(1) if m else None
+
+    print("DEBUG: Transform du item =", item_transform)
+
+    if item_transform:
+
+        # Transform
+        settings_xml = re.sub(
+            r'(<assemble_item[^>]*object_id="' + correct_wrapper_id + r'"[^>]*transform=")[^"]+',
+            lambda m: m.group(1) + item_transform,
+            settings_xml
+        )
+
+        # Offset
+        settings_xml = re.sub(
+            r'(<assemble_item[^>]*object_id="' + correct_wrapper_id + r'"[^>]*offset=")[^"]+',
+            lambda m: m.group(1) + "0 0 0",
+            settings_xml
+        )
+
+        print("DEBUG: Synchronisation du transform effectuée.")
+    else:
+        print("ERREUR: Impossible d'extraire le transform du item.")
+
+    # ------------------------------------------------------------
+    # 6. Reconstruction du fichier 3dmodel.model
+    # ------------------------------------------------------------
+    before_resources = model_xml.split("<resources>")[0]
+    new_resources = f"<resources>\n{correct_wrapper_block}\n</resources>"
+    new_build = f"<build>\n{correct_item_block}\n</build>"
+
+    final_model_xml = before_resources + new_resources + new_build + "</model>"
+
+    # ------------------------------------------------------------
+    # 7. Nettoyage du fichier .rels
+    # ------------------------------------------------------------
+    rels = re.findall(
+        r'(<Relationship[^>]*Target="([^"]+)"[^>]*/>)',
+        rels_xml
+    )
+
+    new_rels_list = []
+    for block, target in rels:
+        if mesh_file in target:
+            new_rels_list.append(block)
+
+    new_rels_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n'
+        + "\n".join(new_rels_list) +
+        "\n</Relationships>"
+    )
+
+    # ------------------------------------------------------------
+    # 8. Écriture du ZIP final
+    # ------------------------------------------------------------
+    with zipfile.ZipFile(tmp_output, 'w', zipfile.ZIP_DEFLATED) as zout:
+
+        zout.writestr("3D/3dmodel.model", final_model_xml)
+        zout.writestr("3D/_rels/3dmodel.model.rels", new_rels_xml)
+        zout.writestr("Metadata/model_settings.config", settings_xml)
+        zout.writestr(mesh_file, objects_models[mesh_file])
+
+        with zipfile.ZipFile(input_path, 'r') as zin:
+            for f in zin.namelist():
+
+                if f in [
+                    "3D/3dmodel.model",
+                    "3D/_rels/3dmodel.model.rels",
+                    "Metadata/model_settings.config",
+                    mesh_file
+                ]:
+                    continue
+
+                if f.startswith("3D/Objects/") and f.endswith(".model"):
+                    continue
+
+                zout.writestr(f, zin.read(f))
+
+    shutil.copyfile(tmp_output, output_path)
+    #os.remove(tmp_output)
+
+    print("DEBUG: Nettoyage terminé →", output_path)
+
+
+def clean_multi_object_style(src_3mf, dst_3mf, slicer_target):
     """
     Nettoyage CHIRURGICAL d'un 3MF QidiStudio.
     Version corrigée + PATCH chemins :
@@ -1839,6 +2104,15 @@ def clean_multi_object_style(src_3mf, dst_3mf):
     if DEBUG: print("\n=== clean_multi_object_style ===")
     if not os.path.exists(src_3mf):
         if DEBUG: print(' dans clean_multi_object_style fichier src_3mf inexistant', src_3mf)
+
+    # --- Si QIDIStudio → fonction spécifique
+    # pour éventuellement convertir du multiobjet en mono objet
+    if slicer_target == "qidistudio":
+        if DEBUG: print("🔄 QIDIStudio détecté → appel convert_qidistudio_to_singleobject")
+        #convert_qidistudio_to_singleobject(src_3mf, dst_3mf)
+        convert_qidistudio_to_singleobject(src_3mf, src_3mf)
+
+
 
     rels_path = "3D/_rels/3dmodel.model.rels"
     config_path = "Metadata/model_settings.config"
@@ -2631,7 +2905,7 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
 
         if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
             keep_object_id, keep_model = clean_multi_object_style(
-                old_3mf_backup, cleaned_old_3mf
+                old_3mf_backup, cleaned_old_3mf, slicer_target
             )
         else:
             shutil.copy(old_3mf_backup, cleaned_old_3mf)
