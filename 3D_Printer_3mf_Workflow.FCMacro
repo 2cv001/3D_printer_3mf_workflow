@@ -1875,9 +1875,7 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
     # ------------------------------------------------------------
     # 1. Lire le ZIP source
     # ------------------------------------------------------------
-    # ------------------------------------------------------------
-    # 1. Lire le ZIP source
-    # ------------------------------------------------------------
+
     with zipfile.ZipFile(input_path, 'r') as zin:
 
         filelist = zin.namelist()
@@ -1939,7 +1937,6 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
         print("ERREUR: Aucun mesh trouvé.")
         return
 
-    print("DEBUG: Mesh réel =", mesh_file, "id =", mesh_id)
 
     # ------------------------------------------------------------
     # 3. Trouver les wrappers
@@ -1962,7 +1959,6 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
         print("ERREUR: Aucun wrapper ne pointe vers le mesh.")
         return
 
-    print("DEBUG: Wrapper correct id =", correct_wrapper_id)
 
     # ------------------------------------------------------------
     # 5. Trouver les items dans <build>
@@ -1976,7 +1972,7 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
     # Détection du cas mono-objet (simple)
     # ------------------------------------------------------------
     if len(wrappers) == 1 and len(items) == 1:
-        print("DEBUG: Fichier déjà mono-objet → aucune modification.")
+        if DEBUG: print("DEBUG: Fichier déjà mono-objet → aucune modification.")
         return
 
     # ------------------------------------------------------------
@@ -2003,8 +1999,6 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
     m = re.search(r'transform="([^"]+)"', correct_item_block)
     item_transform = m.group(1) if m else None
 
-    print("DEBUG: Transform du item =", item_transform)
-
     if item_transform:
 
         # Transform
@@ -2021,9 +2015,9 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
             settings_xml
         )
 
-        print("DEBUG: Synchronisation du transform effectuée.")
+        if DEBUG: print("DEBUG: Synchronisation du transform effectuée.")
     else:
-        print("ERREUR: Impossible d'extraire le transform du item.")
+        if DEBUG: print("ERREUR: Impossible d'extraire le transform du item.")
 
     # ------------------------------------------------------------
     # 6. Reconstruction du fichier 3dmodel.model
@@ -2083,7 +2077,68 @@ def convert_qidistudio_to_singleobject(input_path, output_path=None):
     shutil.copyfile(tmp_output, output_path)
     os.remove(tmp_output)
 
-    print("DEBUG: Nettoyage terminé →", output_path)
+
+
+
+# ------------------------------------------------------------
+# Converti un fichier 3mf type qidislicer multi Objet en
+# fichier 3mf mono objet
+# ------------------------------------------------------------
+def convert_qidislicer_to_singleobject(input_path, output_path=None):
+
+    # --- Mode in-place si output_path non fourni ---
+    if output_path is None:
+        output_path = input_path
+
+    # --- Fichier temporaire (même logique que QIDIStudio) ---
+    tmp_output = output_path + ".tmp"
+
+    model_path = "3D/3dmodel.model"
+
+    with zipfile.ZipFile(input_path, "r") as zin:
+        model_txt = zin.read(model_path).decode("utf-8")
+
+        # --- 1) Trouver le premier <item> ---
+        m = re.search(r'<item[^>]*objectid="(\d+)"', model_txt)
+        if not m:
+            print("DEBUG: Aucun <item> trouvé → copie directe")
+            shutil.copyfile(input_path, tmp_output)
+            shutil.copyfile(tmp_output, output_path)
+            os.remove(tmp_output)
+            return None
+
+        keep_object_id = m.group(1)
+
+        # --- 2) Supprimer les <object> excédentaires ---
+        model_txt = re.sub(
+            rf'<object[^>]*id="(?!{keep_object_id}")\d+"[\s\S]*?</object>',
+            '',
+            model_txt
+        )
+
+        # --- 3) Supprimer les <item> excédentaires ---
+        model_txt = re.sub(
+            rf'<item[^>]*objectid="(?!{keep_object_id}")\d+"[^>]*/>',
+            '',
+            model_txt
+        )
+
+        # --- 4) Réécriture du ZIP dans tmp_output ---
+        with zipfile.ZipFile(tmp_output, "w", compression=zipfile.ZIP_STORED) as zout:
+            for item in zin.infolist():
+                name = item.filename.replace("\\", "/")
+
+                if name == model_path:
+                    zout.writestr(name, model_txt)
+                else:
+                    zout.writestr(name, zin.read(item.filename))
+
+    # --- 5) Remplacement final ---
+    shutil.copyfile(tmp_output, output_path)
+    os.remove(tmp_output)
+
+    return keep_object_id
+
 
 
 def clean_multi_object_style(src_3mf, dst_3mf, slicer_target):
@@ -2098,7 +2153,7 @@ def clean_multi_object_style(src_3mf, dst_3mf, slicer_target):
     - Nettoyage complet de Metadata/model_settings.config
     """
 
-    if DEBUG: print("\n=== clean_multi_object_style ===")
+    print("\n=== clean_multi_object_style ===")
     if not os.path.exists(src_3mf):
         if DEBUG: print(' dans clean_multi_object_style fichier src_3mf inexistant', src_3mf)
 
@@ -2106,10 +2161,11 @@ def clean_multi_object_style(src_3mf, dst_3mf, slicer_target):
     # pour éventuellement convertir du multiobjet en mono objet
     if slicer_target == "qidistudio":
         if DEBUG: print("🔄 QIDIStudio détecté → appel convert_qidistudio_to_singleobject")
-        #convert_qidistudio_to_singleobject(src_3mf, dst_3mf)
         convert_qidistudio_to_singleobject(src_3mf, src_3mf)
 
-
+    if slicer_target == "qidislicer":
+        if DEBUG: print("🔄 QIDISlicer détecté → appel convert_qidislicer_to_singleobject")
+        convert_qidislicer_to_singleobject(src_3mf, src_3mf)
 
     rels_path = "3D/_rels/3dmodel.model.rels"
     config_path = "Metadata/model_settings.config"
@@ -2899,7 +2955,7 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
         # cleaned_old_3mf = base_name + ".cleaned.3mf"
         keep_model = None
         keep_object_id = None
-
+        print('2969 slicer_source : ',slicer_source)
         if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
             keep_object_id, keep_model = clean_multi_object_style(
                 old_3mf_backup, cleaned_old_3mf, slicer_target
