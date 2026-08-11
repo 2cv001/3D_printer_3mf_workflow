@@ -26,6 +26,7 @@
 # qidislicer (famille qidislicer) : ok
 # cura (famille qidislicer) : ok
 # anycubic(famille qidistudio) : ok
+# Creality (famille qidistudio) : ok
 
 
 
@@ -64,7 +65,7 @@ global_origin_z = 0.0
 
 MAX_OLD_BACKUPS = 2 # nb de sauvegarde
 
-DEBUG = True
+DEBUG = False
 DEBUGPIPE = False
 
 def is_running_in_flatpak():
@@ -1108,9 +1109,9 @@ def detect_slicer_target_from_path(path):
             #"prusa",
             "super",
             "superslicer",
-            "flashprint",
-            "ideamaker", # non compatible :e ne génère pas de 3mf avaec paramèètres imp
-            "raise3d", # non compatible :e ne génère pas de 3mf avaec paramèètres imp
+            "flashprint",# non compatible :e ne génère pas de 3mf avaec paramètres imp
+            "ideamaker", # non compatible :e ne génère pas de 3mf avaec paramètres imp
+            "raise3d", # non compatible :e ne génère pas de 3mf avaec paramètres imp
             #"orca",
     )):
         return "qidislicer"
@@ -1496,7 +1497,7 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
             "prusaslicer": "qidislicer",
             "prusa-slicer": "qidislicer",
             "anycubic": "qidistudio",
-            "flashprint": "slic3r",  # FlashPrint 5 = structure Prusa-like
+            "flashprint": "qidislicer",  # FlashPrint 5 ne génère pas de 3mf avec paramètres imprimante
             "ideamaker": "qidislicer",  # IdeaMaker ne génère pas de 3mf avec paramètres imprimante
             "raise3d": "qidislicer",  # IdeaMaker ne génère pas de 3mf avec paramètres imprimante
 
@@ -1507,7 +1508,6 @@ def analyse_fichier_3mf(file_path: str) -> Dict[str, Optional[str]]:
         # Recherche automatique
         for key, value in MAPPINGS.items():
             if key in lower:
-                print('1526', 'analyse fichier 3mf', value)
                 return value
 
         # Sinon : par défaut : qidislicer
@@ -2936,7 +2936,6 @@ def inject_geometry_if_possible(base_name, fc_3mf, old_3mf_backup, fc_3mf_existe
         # cleaned_old_3mf = base_name + ".cleaned.3mf"
         keep_model = None
         keep_object_id = None
-        print('2969 slicer_source : ',slicer_source)
         if slicer_source in ("qidistudio", "qidislicer", "slic3r"):
             keep_object_id, keep_model = clean_multi_object_style(
                 old_3mf_backup, cleaned_old_3mf, slicer_target
