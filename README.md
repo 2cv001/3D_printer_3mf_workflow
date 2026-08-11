@@ -70,22 +70,44 @@ Without visible facets
     • ✅ No need to re-enter anything — changes are preserved 
 
 
-## Technical Notes
+## Technical Notes / slicer compatibility
 
     • .3mf files are used instead of .stl to retain print metadata 
     
-    • Compatible with most slicers that support .3mf: 
-        tested with QidiSlicer, QidiStudio, Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, Anycubic, Creality. 
-    • Not compatible with slicers that do not produce 3MF files containing print settings (e.g., ideaMaker, FlashPrint).
-    
-    For other slicers, feel free to try — it should work. Otherwise, please open an issue on GitHub.
-    
+
     • Geometry is extracted from the active FreeCAD document 
     
     • Print settings are stored inside the .3mf file in the same directory as the project FreeCAD
     
     • The macro can be configured to run other commands, such as turning on the printer using a connected smart plug.
 
+    • Compatible with most slicers that support .3mf: 
+        tested with QidiSlicer, QidiStudio, Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, Anycubic, Creality. 
+    • Not compatible with slicers that do not produce 3MF files containing print settings (e.g., ideaMaker, FlashPrint).
+    
+
+
+### Tested Compatible Slicers
+
+| Slicer           | Family       | 3MF Format             | Includes Print Settings | Status      |
+|------------------|--------------|------------------------|-------------------------|-------------|
+| QIDISlicer       | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
+| SuperSlicer      | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
+| Cura             | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
+| OrcaSlicer       | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
+| QIDIStudio       | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
+| Anycubic         | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
+| Creality Print   | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
+
+### Tested Incompatible Slicers (because they do not store print settings in 3MF)
+
+| Slicer        | Family       | 3MF Format     | Includes Print Settings  | Status        |
+|---------------|--------------|----------------|--------------------------|---------------|
+| FlashPrint 5  | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
+| IdeaMaker     | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
+| Raise3D       | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
+    
+For other slicers, feel free to try — it should work. Otherwise, please open an issue on GitHub.
 
 ## Installation and use
 The best way to install the macro is to use the addon manager in Freecad. Then:
