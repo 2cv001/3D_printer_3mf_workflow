@@ -89,8 +89,6 @@ Without visible facets
 
 ### Tested Compatible Slicers
 
-### Tested Compatible Slicers
-
 | Slicer           | Family in macro | Includes Print Settings in 3mf| Status      |
 |------------------|------------------|------------------------------|-------------|
 | QIDISlicer       | qidislicer       | ✔ Yes                       | Compatible  |
@@ -102,7 +100,7 @@ Without visible facets
 | Creality Print   | qidistudio       | ✔ Yes                       | Compatible  |
 
 
-### Tested Incompatible Slicers (because they do not store print settings in 3MF)
+### Tested Incompatible Slicers (they do not store print settings in 3MF)
 
 | Slicer        |  Includes Print Settings in 3mf | Status        |
 |---------------|---------------------------------|----------------|
