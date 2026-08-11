@@ -111,8 +111,6 @@ Unlike .stl, the .3mf format supports:
 
     • Embedded print settings 
     
-    • Multiple objects 
-    
     • Metadata and units 
     
     • Better geometry fidelity 
