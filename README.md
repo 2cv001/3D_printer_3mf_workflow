@@ -74,7 +74,8 @@ Without visible facets
 
     • .3mf files are used instead of .stl to retain print metadata 
     
-    • Compatible with most slicers that support .3mf: tested with QidiSlicer, QidiStudio, Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, Anycubic. 
+    • Compatible with most slicers that support .3mf: 
+        tested with QidiSlicer, QidiStudio, Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, Anycubic, Creality. 
     • Not compatible with slicers that do not produce 3MF files containing print settings (e.g., ideaMaker).
     
     For other slicers, feel free to try — it should work. Otherwise, please open an issue on GitHub.
