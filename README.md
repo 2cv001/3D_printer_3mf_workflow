@@ -82,7 +82,7 @@ Without visible facets
     
     • Geometry is extracted from the active FreeCAD document 
     
-    • Print settings are stored inside the .3mf file in the same directiry as the project FreeCAD
+    • Print settings are stored inside the .3mf file in the same directory as the project FreeCAD
     
     • The macro can be configured to run other commands, such as turning on the printer using a connected smart plug.
 
