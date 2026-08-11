@@ -82,8 +82,8 @@ Without visible facets
     • The macro can be configured to run other commands, such as turning on the printer using a connected smart plug.
 
     • Compatible with most slicers that support .3mf: 
-        tested with QidiSlicer, QidiStudio, Cura, PrusaSlicer, OrcaSlicer, Bambu Studio, Anycubic, Creality. 
-    • Not compatible with slicers that do not produce 3MF files containing print settings (e.g., ideaMaker, FlashPrint).
+
+    • Not compatible with slicers that do not produce 3MF files containing print settings.
     
 
 
