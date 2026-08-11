@@ -98,15 +98,16 @@ Without visible facets
 | QIDIStudio       | qidistudio       | ✔ Yes                       | Compatible  |
 | Anycubic         | qidistudio       | ✔ Yes                       | Compatible  |
 | Creality Print   | qidistudio       | ✔ Yes                       | Compatible  |
+| Bambu Studio     | qidistudio       | ✔ Yes                       | Compatible  |
 
 
 ### Tested Incompatible Slicers (they do not store print settings in 3MF)
 
 | Slicer        |  Includes Print Settings in 3mf | Status        |
 |---------------|---------------------------------|----------------|
-| FlashPrint 5  | ❌ No                          | Incompatible  |
-| IdeaMaker     | ❌ No                          | Incompatible  |
-| Raise3D       | ❌ No                          | Incompatible  |
+| FlashPrint 5  | ❌ No                           | Incompatible  |
+| IdeaMaker     | ❌ No                           | Incompatible  |
+| Raise3D       | ❌ No                           | Incompatible  |
     
 For other slicers, feel free to try — it should work. Otherwise, please open an issue on GitHub.
 
