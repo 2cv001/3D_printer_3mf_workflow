@@ -89,23 +89,26 @@ Without visible facets
 
 ### Tested Compatible Slicers
 
-| Slicer           | Family       | 3MF Format             | Includes Print Settings | Status      |
-|------------------|--------------|------------------------|-------------------------|-------------|
-| QIDISlicer       | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
-| SuperSlicer      | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
-| Cura             | qidislicer   | Slic3r_PE.config       | ✔ Yes                   | Compatible  |
-| OrcaSlicer       | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
-| QIDIStudio       | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
-| Anycubic         | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
-| Creality Print   | qidistudio   | Metadata/*.xml         | ✔ Yes                   | Compatible  |
+### Tested Compatible Slicers
+
+| Slicer           | Family in macro | Includes Print Settings in 3mf| Status      |
+|------------------|------------------|------------------------------|-------------|
+| QIDISlicer       | qidislicer       | ✔ Yes                       | Compatible  |
+| SuperSlicer      | qidislicer       | ✔ Yes                       | Compatible  |
+| Cura             | qidislicer       | ✔ Yes                       | Compatible  |
+| OrcaSlicer       | qidistudio       | ✔ Yes                       | Compatible  |
+| QIDIStudio       | qidistudio       | ✔ Yes                       | Compatible  |
+| Anycubic         | qidistudio       | ✔ Yes                       | Compatible  |
+| Creality Print   | qidistudio       | ✔ Yes                       | Compatible  |
+
 
 ### Tested Incompatible Slicers (because they do not store print settings in 3MF)
 
-| Slicer        | Family       | 3MF Format     | Includes Print Settings  | Status        |
-|---------------|--------------|----------------|--------------------------|---------------|
-| FlashPrint 5  | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
-| IdeaMaker     | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
-| Raise3D       | qidislicer   | Minimal 3MF    | ❌ No                    | Incompatible  |
+| Slicer        |  Includes Print Settings in 3mf | Status        |
+|---------------|---------------------------------|----------------|
+| FlashPrint 5  | ❌ No                          | Incompatible  |
+| IdeaMaker     | ❌ No                          | Incompatible  |
+| Raise3D       | ❌ No                          | Incompatible  |
     
 For other slicers, feel free to try — it should work. Otherwise, please open an issue on GitHub.
 
