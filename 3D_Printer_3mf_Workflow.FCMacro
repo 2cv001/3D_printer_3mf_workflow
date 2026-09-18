@@ -211,7 +211,7 @@ TRANSLATIONS = {
         "base3mf_filter": "Fichiers 3MF (*.3mf)",
         "select_3mf_placeholder": "Sélectionner un fichier .3mf",
         "hint_base3mf": "Facultatif : permet d’utiliser les paramètres d’imprimante d’un autre fichier 3MF."
-                        "\nPar défaut, le fichier 3MF du projet est utilisé.",
+                        "\nPar défaut, le fichier 3MF de l’objet sélectionné est utilisé.",
 
         # Messages d'erreur / avertissement
         "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
@@ -310,7 +310,7 @@ TRANSLATIONS = {
         "base3mf_filter": "3MF files (*.3mf)",
         "select_3mf_placeholder": "Select a .3mf file",
         "hint_base3mf": "Optional: allows using printer parameters from another 3MF file."
-                        "\nBy default, the project’s 3MF file is used.",
+                        "\nBy default, the selected object's 3MF file is used.",
 
         # Error / warning messages
         "error_no_doc": "❌ No document open in FreeCAD.",
@@ -411,7 +411,7 @@ TRANSLATIONS = {
         "base3mf_filter": "3MF Dateien (*.3mf)",
         "select_3mf_placeholder": "Wähle eine .3mf Datei",
         "hint_base3mf": "Optional: Ermöglicht die Nutzung der Druckerparameter einer anderen 3MF Datei."
-                        "\nStandardmäßig wird die projekteigene 3MF Datei genutzt.",
+                        "\nStandardmäßig wird die 3MF Datei des ausgewählten Objekts genutzt.",
 
         # Error / warning messages
         "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
@@ -801,7 +801,8 @@ def save_settings(linear, angular_rad, slicer_path, ignore_transform):
         f.writelines(new_lines)
 
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
-def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref):
+def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref,
+                     default_fc_3mf):
     """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
     dialog = QtGui.QDialog()
     dialog.setWindowTitle(tr("options_title"))
@@ -851,16 +852,6 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     btn_browse.clicked.connect(browse)
     h_slicer.addWidget(btn_browse)
     layout.addLayout(h_slicer)
-
-    # ------------------------------------------------------------
-    # Calcul du fichier 3MF par défaut
-    # ------------------------------------------------------------
-    doc = FreeCAD.ActiveDocument
-    if doc and doc.FileName:
-        fcstd_path = doc.FileName
-        default_fc_3mf = os.path.splitext(fcstd_path)[0] + ".3mf"
-    else:
-        default_fc_3mf = "select file .3mf"
 
     # ------------------------------------------------------------
     # Ligne "Fichier 3MF de base" alignée EXACTEMENT comme la ligne EXE
@@ -1007,7 +998,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     else:
         return (None, None, None, None, None, None, None, None, [])
 
-def get_user_options(cfg):
+def get_user_options(cfg, fc_3mf):
     """
     Affiche la boîte de dialogue utilisateur :
     - paramètres FreeCAD
@@ -1036,7 +1027,7 @@ def get_user_options(cfg):
          slicer_path, base3mf_path, launch_slicer,
          linear_value, angular_value, reset_all,
          ignore_transform, extra_cmds) = ask_user_options(
-            slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref
+            slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf
         )
 
         # Annulation
@@ -2349,16 +2340,54 @@ def ask_incompatible_slicer_dialog(s_source, s_target):
         return "delete"
     return "cancel"
 
+def safe_export_label(obj):
+    """Convert the visible object label to a portable filename component."""
+    label = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', obj.Label).strip().rstrip('. ')
+    if not label:
+        label = obj.Name
+    # Keep object names out of the workflow's backup and temporary namespaces.
+    label = re.sub(r'\.(?=old(?:\.|$)|(?:new|cleaned|source)$)', '_', label, flags=re.I)
+    # Windows device names are reserved even when followed by an extension.
+    if re.fullmatch(r'CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]', label.split('.')[0], re.I):
+        label = '_' + label
+    return label
+
+
+def get_export_base_name(doc, selected_obj):
+    """Keep exports beside the project, with distinct names for its objects."""
+    objects = sorted(doc.Objects, key=lambda obj: obj.Name)
+    labels = {obj.Name: safe_export_label(obj) for obj in objects}
+    counts = {}
+    for label in labels.values():
+        key = label.casefold()
+        counts[key] = counts.get(key, 0) + 1
+
+    used = set()
+    for obj in objects:
+        label = labels[obj.Name]
+        candidate = label
+        if counts[label.casefold()] > 1:
+            candidate += '_' + obj.Name
+        while candidate.casefold() in used or (
+            candidate != label and candidate.casefold() in counts
+        ):
+            candidate += '_' + obj.Name
+        used.add(candidate.casefold())
+        if obj.Name == selected_obj.Name:
+            return os.path.join(os.path.dirname(doc.FileName), candidate)
+    raise ValueError("The selected object does not belong to the active document")
+
+
 def prepare_environment():
     """
     Prépare l’environnement :
     - charge la config
     - vérifie le document FreeCAD
+    - vérifie la sélection et construit les chemins propres à l’objet
     - détecte le .3mf existant
-    - renomme en .old.3mf si nécessaire
 
     Retourne :
-        (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
+        (cfg, doc, selection, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
     ou None en cas d’erreur.
     """
 
@@ -2375,70 +2404,68 @@ def prepare_environment():
         show_message(tr("error_title"), tr("error_no_save"))
         return None
 
-    # Construction des chemins
-    base_name = os.path.splitext(fcstd_path)[0]
+    selection = get_valid_selection()
+    if selection is None:
+        return None
+
+    # Construction des chemins à partir du nom de l’objet sélectionné
+    base_name = get_export_base_name(doc, selection[0])
     fc_3mf = base_name + ".3mf"
     old_3mf_backup = base_name + ".old.3mf"
 
     # Détection du .3mf existant AVANT export
     fc_3mf_existed_at_start = os.path.exists(fc_3mf)
 
-    return (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
+    return (cfg, doc, selection, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
 
-def get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start):
+def get_export_object(obj):
+    """Use the owning Body for its features, otherwise keep the selected object."""
+    current = obj
+    while current is not None:
+        if current.isDerivedFrom("PartDesign::Body"):
+            return current
+        current = current.getParentGeoFeatureGroup()
+    return obj
+
+
+def get_valid_selection():
     """
     Vérifie la sélection FreeCAD :
-    - 0 objet → message + restauration éventuelle
-    - >1 objet → message + restauration éventuelle
+    - résout les sous-éléments vers leur Body et élimine les doublons
+    - 0 objet → message
+    - >1 objet → message
     Retourne :
         [obj]  → sélection valide
         None   → erreur ou annulation
     """
 
-    # Récupération des objets sélectionnés ayant une Shape valide
-
-    """
-    selection = [
-        obj for obj in FreeCADGui.Selection.getSelection()
-        if hasattr(obj, "Shape") and obj.Shape is not None
-    ]
-    """
-
     sel_ex = FreeCADGui.Selection.getSelectionEx()
     selection = []
+    selected_names = set()
 
     for s in sel_ex:
         obj = s.Object
-        if hasattr(obj, "Shape"):
-            try:
+        if obj.Document != FreeCAD.ActiveDocument:
+            continue
+        try:
+            obj = get_export_object(obj)
+            if obj.Name not in selected_names and hasattr(obj, "Shape"):
                 shape = obj.Shape
                 if shape and not shape.isNull() and shape.Volume > 0:
                     selection.append(obj)
-            except Exception:
-                pass
+                    selected_names.add(obj.Name)
+        except Exception:
+            pass
 
     # Aucun objet sélectionné
     if not selection:
         show_message(tr("warn_title"), tr("warn_no_selection"))
-
-        # Restauration éventuelle du .old.3mf
-        if fc_3mf_existed_at_start \
-                and os.path.exists(old_3mf_backup) \
-                and not os.path.exists(fc_3mf):
-            if DEBUG: print('move ', os.path.basename(old_3mf_backup), 'vers', os.path.basename(fc_3mf))
-            shutil.move(old_3mf_backup, fc_3mf)
 
         return None
 
     # Trop d’objets sélectionnés
     if len(selection) > 1:
         show_message(tr("warn_title"), tr("warn_multi_selection"))
-
-        # Restauration éventuelle du .old.3mf
-        if fc_3mf_existed_at_start \
-                and os.path.exists(old_3mf_backup) \
-                and not os.path.exists(fc_3mf):
-            shutil.move(old_3mf_backup, fc_3mf)
 
         return None
     # Sélection valide : un seul objet
@@ -2559,10 +2586,9 @@ def handle_empty_plate(fc_3mf_existed_at_start, old_3mf_backup, fc_3mf):
     elif clicked == reset_btn:
         if os.path.exists(fc_3mf):
             os.remove(fc_3mf)
-            old_3mf = base_name + ".old.3mf"
-        if os.path.exists(old_3mf):
-            os.remove(old_3mf)
-            if DEBUG: print("Suppression de", os.path.basename(old_3mf))
+        if os.path.exists(old_3mf_backup):
+            os.remove(old_3mf_backup)
+            if DEBUG: print("Suppression de", os.path.basename(old_3mf_backup))
 
         if DEBUG: print("🗑️ New projet : 3MF FreeCAD deleted. Macro run again.")
         export_replace_geometry()
@@ -3310,10 +3336,11 @@ def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
     if not launch_slicer:
         show_message(tr("info_title"), tr("info_done"))
 
-def run_extra_commands(extra_cmds, project_path):
+def run_extra_commands(extra_cmds, project_path, export_basepath):
     """
     Exécute les commandes externes définies par l’utilisateur.
     project_path = chemin complet du projet FreeCAD, AVEC extension (.FCStd)
+    export_basepath = chemin de l’export de l’objet, SANS extension
     """
 
     if DEBUG:
@@ -3336,6 +3363,8 @@ def run_extra_commands(extra_cmds, project_path):
             part.replace("%PROJECT%", project_basepath)
                 .replace("%PROJECTDIR%", project_dir)
                 .replace("%PROJECTNAME%", project_name)
+                .replace("%EXPORT%", export_basepath)
+                .replace("%EXPORTNAME%", os.path.basename(export_basepath))
             for part in cmd
         ]
 
@@ -3364,7 +3393,7 @@ def export_replace_geometry():
     if env is None:
         return
 
-    (cfg, doc, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start) = env
+    (cfg, doc, selection, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start) = env
 
     """
     # ------------------------------------------------------------
@@ -3384,16 +3413,9 @@ def export_replace_geometry():
 
     """
     # ------------------------------------------------------------
-    # 2) Vérification de la sélection
-    # ------------------------------------------------------------
-    selection = get_valid_selection(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
-    if selection is None:
-        return
-
-    # ------------------------------------------------------------
     # 3) Préférences utilisateur
     # ------------------------------------------------------------
-    opts = get_user_options(cfg)
+    opts = get_user_options(cfg, fc_3mf)
     if opts is None:
         return
 
@@ -3423,6 +3445,7 @@ def export_replace_geometry():
                     print("Le fichier 3MF de base est identique au fichier de travail, aucune copie nécessaire.")
             else:
                 shutil.copy(base3mf_path, fc_3mf)
+                fc_3mf_existed_at_start = True
                 if DEBUG:
                     print("Copie du fichier 3MF de base :", os.path.basename(base3mf_path),
                           "vers", os.path.basename(fc_3mf))
@@ -3583,7 +3606,7 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     doc = FreeCAD.ActiveDocument
     project_path = doc.FileName
-    run_extra_commands(extra_cmds, project_path)
+    run_extra_commands(extra_cmds, project_path, base_name)
 
 
 export_replace_geometry()
