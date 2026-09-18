@@ -35,6 +35,11 @@ in the same directory as the saved FreeCAD document. For example, selecting
 creates `Lid.3mf` and `Lid.stl`. Each object has its own 3MF print settings and backups.
 Select one object and run the macro, then repeat for the next object.
 
+For a PartDesign Body, selecting a face or edge in the 3D view, or a feature such
+as a Pad or Pocket in the tree, exports the whole Body using the **Body's Label**.
+Selecting several features of the same Body still counts as one object.
+Objects outside a Body retain their own labels and geometry.
+
 Filename-incompatible characters are replaced with underscores. Names that collide
 within the document (including after sanitizing or ignoring letter case) receive
 the object's internal name as a suffix. Workflow backup/temporary suffixes and

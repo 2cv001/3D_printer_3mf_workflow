@@ -2418,9 +2418,20 @@ def prepare_environment():
 
     return (cfg, doc, selection, base_name, fc_3mf, old_3mf_backup, fc_3mf_existed_at_start)
 
+def get_export_object(obj):
+    """Use the owning Body for its features, otherwise keep the selected object."""
+    current = obj
+    while current is not None:
+        if current.isDerivedFrom("PartDesign::Body"):
+            return current
+        current = current.getParentGeoFeatureGroup()
+    return obj
+
+
 def get_valid_selection():
     """
     Vérifie la sélection FreeCAD :
+    - résout les sous-éléments vers leur Body et élimine les doublons
     - 0 objet → message
     - >1 objet → message
     Retourne :
@@ -2430,16 +2441,21 @@ def get_valid_selection():
 
     sel_ex = FreeCADGui.Selection.getSelectionEx()
     selection = []
+    selected_names = set()
 
     for s in sel_ex:
         obj = s.Object
-        if obj.Document == FreeCAD.ActiveDocument and hasattr(obj, "Shape"):
-            try:
+        if obj.Document != FreeCAD.ActiveDocument:
+            continue
+        try:
+            obj = get_export_object(obj)
+            if obj.Name not in selected_names and hasattr(obj, "Shape"):
                 shape = obj.Shape
                 if shape and not shape.isNull() and shape.Volume > 0:
                     selection.append(obj)
-            except Exception:
-                pass
+                    selected_names.add(obj.Name)
+        except Exception:
+            pass
 
     # Aucun objet sélectionné
     if not selection:
