@@ -27,6 +27,29 @@ allowing smooth mesh generation just like before.
 # Limitation
 The current version can export only a single object, but you can work around this by using links — for example, a Simple Group — to combine multiple objects into one.
 
+## Export filenames
+
+Exports use the selected object's visible name (its **Label** in the FreeCAD tree),
+in the same directory as the saved FreeCAD document. For example, selecting
+`Housing` creates `Housing.3mf` and, if enabled, `Housing.stl`; selecting `Lid`
+creates `Lid.3mf` and `Lid.stl`. Each object has its own 3MF print settings and backups.
+Select one object and run the macro, then repeat for the next object.
+
+Filename-incompatible characters are replaced with underscores. Names that collide
+within the document (including after sanitizing or ignoring letter case) receive
+the object's internal name as a suffix. Workflow backup/temporary suffixes and
+Windows device names are also adjusted to avoid conflicts.
+Use distinct, stable labels: renaming an object changes its export filename.
+Objects from different documents in the same folder should also have distinct labels.
+
+Existing exports named after the project are not renamed automatically. To reuse
+their print settings, select the old `.3mf` in the **3MF file for print parameters**
+field on the first export of a part. Save subsequent slicer changes in that part's
+new `.3mf` file.
+
+This supports separate exports of 3D objects in one document; it does not split
+individual contours of a sketch or solids inside a single selected object.
+
 # Smoothing Principle
 
 The macro exports the selected objects to a 3MF file using the specified tessellation parameters (LinearDeflection and AngularDeflection). 
@@ -172,26 +195,32 @@ The ⚙️ button in the options window allows you to both install and open the 
  <img width="897" height="528" alt="Capture d&#39;écran 2026-08-02 085921" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
 
  
-## Using %PROJECT%, %PROJECTDIR%, and %PROJECTNAME% in user commands
-When you define custom post‑processing commands in the workflow, you can use three special placeholders.
-These placeholders are automatically replaced by values derived from your FreeCAD project file.
+## Using project and export placeholders in user commands
+Custom post-processing commands can refer to both the FreeCAD project and the
+selected object's export. Existing `%PROJECT%` placeholders keep their meaning;
+commands that process the generated 3MF should use `%EXPORT%.3mf`.
 
 ### Available placeholders
-Placeholder	Meaning
-%PROJECT%	Full path of the FreeCAD project without extension
-%PROJECTDIR%	Folder containing the FreeCAD project
-%PROJECTNAME%	Project file name without extension
+
+| Placeholder | Meaning |
+|-------------|---------|
+| `%PROJECT%` | Full path of the FreeCAD project without extension |
+| `%PROJECTDIR%` | Folder containing the FreeCAD project |
+| `%PROJECTNAME%` | Project file name without extension |
+| `%EXPORT%` | Full path of the selected object's export without extension |
+| `%EXPORTNAME%` | Export file name without extension |
+
 ## Examples
 Copy the generated 3MF file next to the project :
 
 ```bash
-copy "%PROJECT%.3mf" "%PROJECTDIR%/backup/%PROJECTNAME%.3mf"
+copy "%EXPORT%.3mf" "%PROJECTDIR%/backup/%EXPORTNAME%.3mf"
 ```
 
 Run a script stored in the project folder :
 
 ```bash
-python "%PROJECTDIR%/scripts/postprocess.py" "%PROJECT%.3mf"
+python "%PROJECTDIR%/scripts/postprocess.py" "%EXPORT%.3mf"
 ```
 
 Send an HTTP request using the project name :
@@ -214,5 +243,3 @@ Or if your device have a password :
 ```bash
 curl -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
 ```
-
-
