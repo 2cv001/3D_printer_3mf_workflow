@@ -44,12 +44,34 @@ slicer, with its own print settings.
   changed, they may no longer fit (objects too close to each other, for
   example). Make the copies again in the slicer.
 - With a single selected object and a 3MF whose object has another name, the
-  first object on the plate is replaced, so 3MF files made by previous versions
-  keep working.
-- To reuse the settings of another 3MF (for example to add an object to an
-  existing set), choose it in the **3MF file for print parameters** field.
+  first object on the plate is replaced and renamed after the FreeCAD object,
+  so 3MF files made by previous versions keep working.
 - With the STL option, all the selected objects go into one STL file.
 - Objects inside an App::Part are exported at their global position.
+
+### Choosing the base 3MF
+
+The **3MF file for print parameters** list chooses the 3MF whose print settings
+and objects are reused:
+
+- **No base (new 3MF)**: a new 3MF containing only the geometry. If the 3MF of
+  the selection already exists, it is kept as a `.old` backup.
+- **This selection's 3MF**: the usual choice, selected by default when it exists.
+- The other 3MF files of the project folder, most recent first.
+- The last bases used in other folders (remembered from one session to the next).
+- **Browse…** picks a 3MF anywhere, for example in another project.
+
+Below the list, the macro shows the name the 3MF will be saved as. The base
+file itself is never modified; if the 3MF of the selection already exists and
+another base is chosen, it is backed up first (`.old` file).
+
+From the base, the macro always keeps the **general settings**: printer,
+filament (type, temperatures, cooling… and all the filaments of a multi-color
+printer) and print profile (layer height, speeds, walls, default infill and
+supports…). The **settings of an object** (its own infill, walls, layer height,
+supports, filament, modifiers…) are kept only for the objects matched by name.
+Objects of the base that match no selected object are removed; new objects get
+the general settings and the first filament.
 
 ### Painting and modifiers
 
@@ -82,8 +104,8 @@ Use distinct, stable labels: renaming an object changes its export filename.
 Objects from different documents in the same folder should also have distinct labels.
 
 Existing exports named after the project are not renamed automatically. To reuse
-their print settings, select the old `.3mf` in the **3MF file for print parameters**
-field on the first export of a part. Save subsequent slicer changes in that part's
+their print settings, choose the old `.3mf` in the **3MF file for print parameters**
+list (or with **Browse…**) on the first export of a part. Save subsequent slicer changes in that part's
 new `.3mf` file.
 
 Each selected object becomes one object in the slicer; the macro does not split
