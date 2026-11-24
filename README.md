@@ -58,7 +58,9 @@ and objects are reused:
   the selection already exists, it is kept as a `.old` backup.
 - **This selection's 3MF**: the usual choice, selected by default when it exists.
 - The other 3MF files of the project folder, most recent first.
-- The last bases used in other folders (remembered from one session to the next).
+- The last bases used in other folders (the last 8, remembered from one session
+  to the next), shown with their folder and date; hover over a line to see its
+  full path.
 - **Browse…** picks a 3MF anywhere, for example in another project.
 
 Below the list, the macro shows the name the 3MF will be saved as. The base

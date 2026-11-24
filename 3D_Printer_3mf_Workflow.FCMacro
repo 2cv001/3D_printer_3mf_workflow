@@ -859,10 +859,47 @@ def list_base3mf_choices(fc_3mf, recent):
     local.sort(key=lambda p: os.path.getmtime(p), reverse=True)
     for p in local:
         add(p, os.path.basename(p))
-    for p in recent:
-        if os.path.exists(p):
-            add(p, f"{os.path.basename(p)}   —   {os.path.dirname(os.path.abspath(p))}")
+    others = [p for p in recent if os.path.exists(p)]
+    for p, label in zip(others, base3mf_other_labels(others)):
+        add(p, label)
     return choices
+
+
+def base3mf_other_labels(paths):
+    """
+    Textes affichés pour des 3MF d'autres dossiers : « nom — dossier (date) ».
+    Le chemin complet est trop long pour la liste (sa fin, qui distingue les
+    projets, serait coupée) : on n'affiche que le dossier qui contient le 3MF,
+    et on remonte d'un dossier tant que deux lignes restent identiques
+    (plusieurs « Body.3mf » de projets différents, par exemple).
+    """
+    paths = [os.path.abspath(p) for p in paths]
+
+    def folder_tail(p, depth):
+        parts = [x for x in re.split(r"[\\/]+", os.path.dirname(p)) if x]
+        return os.sep.join(parts[-depth:]) if parts else os.path.dirname(p)
+
+    def date_of(p):
+        try:
+            when = QtCore.QDateTime.fromMSecsSinceEpoch(int(os.path.getmtime(p) * 1000))
+            return QtCore.QLocale().toString(when.date(), QtCore.QLocale.ShortFormat)
+        except Exception:
+            return ""
+
+    depth = [1] * len(paths)
+    for _ in range(6):
+        keys = [(os.path.basename(p).lower(), folder_tail(p, d).lower()) for p, d in zip(paths, depth)]
+        dup = {k for k in keys if keys.count(k) > 1}
+        if not dup:
+            break
+        depth = [d + 1 if k in dup else d for k, d in zip(keys, depth)]
+
+    labels = []
+    for p, d in zip(paths, depth):
+        date = date_of(p)
+        label = f"{os.path.basename(p)}   —   {folder_tail(p, d)}"
+        labels.append(f"{label}   ({date})" if date else label)
+    return labels
 
 
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
@@ -937,6 +974,15 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     for path, label in list_base3mf_choices(default_fc_3mf, recent_base3mf):
         combo_base3mf.addItem(label, path)
         combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
+
+    def widen_base3mf_popup():
+        # La liste déroulée s'élargit pour montrer les lignes en entier
+        fm = combo_base3mf.fontMetrics()
+        texts = [combo_base3mf.itemText(i) for i in range(combo_base3mf.count())]
+        width = max((fm.boundingRect(t).width() for t in texts), default=0) + 40
+        combo_base3mf.view().setMinimumWidth(width)
+
+    widen_base3mf_popup()
     # Par défaut : le 3MF de cette sélection s'il existe, sinon « Sans base »
     if os.path.exists(default_fc_3mf):
         combo_base3mf.setCurrentIndex(1)
@@ -958,9 +1004,19 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             if data and os.path.normcase(data) == os.path.normcase(path):
                 combo_base3mf.setCurrentIndex(i)
                 return
-        combo_base3mf.addItem(f"{os.path.basename(path)}   —   {os.path.dirname(path)}", path)
+        # Même présentation que les autres bases, en distinguant les homonymes déjà listés
+        project_dir = os.path.normcase(os.path.dirname(os.path.abspath(default_fc_3mf)))
+        others = [combo_base3mf.itemData(i) for i in range(combo_base3mf.count())]
+        others = [p for p in others
+                  if p and os.path.normcase(os.path.dirname(os.path.abspath(p))) != project_dir]
+        if os.path.normcase(os.path.dirname(path)) == project_dir:
+            label = os.path.basename(path)
+        else:
+            label = base3mf_other_labels(others + [path])[-1]
+        combo_base3mf.addItem(label, path)
         combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
         combo_base3mf.setCurrentIndex(combo_base3mf.count() - 1)
+        widen_base3mf_popup()
 
     btn_base3mf.clicked.connect(browse_base3mf)
     h_base3mf.addWidget(btn_base3mf)
