@@ -125,6 +125,14 @@ def is_valid_slicer_entry(slicer_path):
     if is_command_like_slicer_path(slicer_path):
         return split_command_line(slicer_path) is not None
 
+    # Un fichier de pièce (3MF choisi par erreur avec le mauvais « Parcourir… »,
+    # par exemple) n'est pas un programme
+    ext = os.path.splitext(slicer_path.strip())[1].lower()
+    if ext in (".3mf", ".stl", ".obj", ".step", ".stp", ".fcstd", ".gcode", ".amf"):
+        return False
+    if platform.system() == "Windows" and ext not in (".exe", ".bat", ".cmd", ".com"):
+        return False
+
     if can_use_flatpak_spawn():
         return host_path_exists(slicer_path) or os.path.exists(slicer_path)
 
@@ -947,7 +955,11 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     btn_browse = QtGui.QPushButton(tr("browse"))
 
     def browse():
-        path, _ = QtGui.QFileDialog.getOpenFileName(dialog, tr("browse"))
+        # Sous Windows, on ne propose que des programmes : évite de choisir
+        # un 3MF ici en le confondant avec le « Parcourir… » du 3MF de base
+        exe_filter = "*.exe *.bat *.cmd" if platform.system() == "Windows" else ""
+        start_dir = os.path.dirname(edit_slicer.text().strip()) if edit_slicer.text().strip() else ""
+        path, _ = QtGui.QFileDialog.getOpenFileName(dialog, tr("browse"), start_dir, exe_filter)
         if path:
             edit_slicer.setText(path)
 
