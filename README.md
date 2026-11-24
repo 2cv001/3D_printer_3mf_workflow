@@ -24,16 +24,50 @@ This macro uses .3mf files, allowing full geometry + print configuration to be p
 To retain the core functionality of the previous macro, this version also provides an STL export option with adjustable tessellation parameters, 
 allowing smooth mesh generation just like before.
 
-# Limitation
-The current version can export only a single object, but you can work around this by using links — for example, a Simple Group — to combine multiple objects into one.
+# Exporting several objects
+
+Select one or more objects (Ctrl+click in the tree) and run the macro. All the
+selected objects go into a single 3MF, each one as a separate object in the
+slicer, with its own print settings.
+
+- **First export**: the objects keep exactly their FreeCAD layout (X, Y and Z).
+  The group is centered on the plate and the lowest object rests on it.
+  If objects overlap, QIDISlicer / PrusaSlicer ask whether to load them as a
+  single object having multiple parts: answer **Yes** to keep them assembled,
+  **No** to get separate objects (then arrange them on the plate).
+- **Next exports**: each FreeCAD object is matched with the slicer object of the
+  same name. Its geometry is replaced; its settings and its position and
+  rotation on the plate are kept, and it is put back on the plate.
+- Objects that are no longer selected are removed from the 3MF; newly selected
+  objects are added at their FreeCAD position.
+- Copies made on the plate in the slicer are removed: once the object has
+  changed, they may no longer fit (objects too close to each other, for
+  example). Make the copies again in the slicer.
+- With a single selected object and a 3MF whose object has another name, the
+  first object on the plate is replaced, so 3MF files made by previous versions
+  keep working.
+- To reuse the settings of another 3MF (for example to add an object to an
+  existing set), choose it in the **3MF file for print parameters** field.
+- With the STL option, all the selected objects go into one STL file.
+- Objects inside an App::Part are exported at their global position.
+
+### Painting and modifiers
+
+Painted supports, seams and colors (and other per-face data) as well as
+modifiers and extra parts are tied to the old geometry and cannot be kept when
+it changes. If some would be lost, the macro tells you which objects are
+concerned and asks you to **Continue** or **Cancel** (the 3MF is then left
+unchanged).
 
 ## Export filenames
 
-Exports use the selected object's visible name (its **Label** in the FreeCAD tree),
-in the same directory as the saved FreeCAD document. For example, selecting
-`Housing` creates `Housing.3mf` and, if enabled, `Housing.stl`; selecting `Lid`
-creates `Lid.3mf` and `Lid.stl`. Each object has its own 3MF print settings and backups.
-Select one object and run the macro, then repeat for the next object.
+The 3MF is named after the selected objects' visible names (their **Label** in
+the FreeCAD tree), sorted alphabetically and joined with `_`, in the same
+directory as the saved FreeCAD document. For example, selecting `Housing`
+creates `Housing.3mf` and, if enabled, `Housing.stl`; selecting `Lid` and
+`Housing` (in any order) creates `Housing_Lid.3mf`. Very long names are
+shortened and get a unique suffix. Each set of objects has its own 3MF print
+settings and backups.
 
 For a PartDesign Body, selecting a face or edge in the 3D view, or a feature such
 as a Pad or Pocket in the tree, exports the whole Body using the **Body's Label**.
@@ -52,13 +86,14 @@ their print settings, select the old `.3mf` in the **3MF file for print paramete
 field on the first export of a part. Save subsequent slicer changes in that part's
 new `.3mf` file.
 
-This supports separate exports of 3D objects in one document; it does not split
-individual contours of a sketch or solids inside a single selected object.
+Each selected object becomes one object in the slicer; the macro does not split
+individual contours of a sketch or solids inside a single selected object
+(use "Split to objects" in the slicer if needed).
 
 # Smoothing Principle
 
 The macro exports the selected objects to a 3MF file using the specified tessellation parameters (LinearDeflection and AngularDeflection). 
-It generates temporary mesh objects for the export process and automatically removes them afterward.
+The meshes are computed in memory: nothing is added to the FreeCAD document.
 
 
 
@@ -91,7 +126,7 @@ Without visible facets
 
     • FreeCAD reads the .3mf file and retrieves the saved print settings
     
-    • It generates a new .3mf file with both geometry and configuration 
+    • It generates a new .3mf file with both geometry and configuration: only the geometry of the objects is replaced, everything else in the file is kept as is 
     
     • The slicer opens the file with all settings preloaded 
     
@@ -202,7 +237,7 @@ The ⚙️ button in the options window allows you to both install and open the 
  
 ## Using project and export placeholders in user commands
 Custom post-processing commands can refer to both the FreeCAD project and the
-selected object's export. Existing `%PROJECT%` placeholders keep their meaning;
+export (named after the selected objects). Existing `%PROJECT%` placeholders keep their meaning;
 commands that process the generated 3MF should use `%EXPORT%.3mf`.
 
 ### Available placeholders
@@ -212,7 +247,7 @@ commands that process the generated 3MF should use `%EXPORT%.3mf`.
 | `%PROJECT%` | Full path of the FreeCAD project without extension |
 | `%PROJECTDIR%` | Folder containing the FreeCAD project |
 | `%PROJECTNAME%` | Project file name without extension |
-| `%EXPORT%` | Full path of the selected object's export without extension |
+| `%EXPORT%` | Full path of the export (named after the selected objects) without extension |
 | `%EXPORTNAME%` | Export file name without extension |
 
 ## Examples
