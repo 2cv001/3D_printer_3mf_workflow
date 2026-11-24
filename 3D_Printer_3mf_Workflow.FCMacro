@@ -34,7 +34,7 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/11/24 19:24"  # YYYY/MM/DD
+__Date__ = "2026/11/24 20:41"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
 __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
@@ -178,8 +178,13 @@ TRANSLATIONS = {
         "base3mf_dialog_title": "Choisir un fichier 3MF pour les paramètres d'impression",
         "base3mf_filter": "Fichiers 3MF (*.3mf)",
         "select_3mf_placeholder": "Sélectionner un fichier .3mf",
-        "hint_base3mf": "Facultatif : permet d’utiliser les paramètres d’imprimante d’un autre fichier 3MF."
-                        "\nPar défaut, le fichier 3MF de l’objet sélectionné est utilisé.",
+        "hint_base3mf": "3MF dont on reprend les paramètres d'impression (et les objets de même nom).\n"
+                        "La liste propose les 3MF du dossier du projet et les dernières bases utilisées ;\n"
+                        "« Parcourir » permet d'en choisir un dans un autre dossier.\n"
+                        "« Sans base » : nouveau 3MF (l'ancien est gardé en sauvegarde .old).",
+        "base3mf_none": "Sans base (nouveau 3MF)",
+        "base3mf_current": "3MF de cette sélection",
+        "base3mf_saved_as": "Sera enregistré sous : {name}",
 
         # Messages d'erreur / avertissement
         "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
@@ -280,8 +285,13 @@ TRANSLATIONS = {
         "base3mf_dialog_title": "Select a 3MF file for print parameters",
         "base3mf_filter": "3MF files (*.3mf)",
         "select_3mf_placeholder": "Select a .3mf file",
-        "hint_base3mf": "Optional: allows using printer parameters from another 3MF file."
-                        "\nBy default, the selected object's 3MF file is used.",
+        "hint_base3mf": "3MF whose print settings are reused (and its objects with the same name).\n"
+                        "The list offers the 3MF files of the project folder and the last bases used;\n"
+                        "\"Browse\" lets you pick one in another folder.\n"
+                        "\"No base\": new 3MF (the previous one is kept as a .old backup).",
+        "base3mf_none": "No base (new 3MF)",
+        "base3mf_current": "this selection's 3MF",
+        "base3mf_saved_as": "Will be saved as: {name}",
 
         # Error / warning messages
         "error_no_doc": "❌ No document open in FreeCAD.",
@@ -384,8 +394,13 @@ TRANSLATIONS = {
         "base3mf_dialog_title": "Wähle eine 3MF Datei für Druckparameter",
         "base3mf_filter": "3MF Dateien (*.3mf)",
         "select_3mf_placeholder": "Wähle eine .3mf Datei",
-        "hint_base3mf": "Optional: Ermöglicht die Nutzung der Druckerparameter einer anderen 3MF Datei."
-                        "\nStandardmäßig wird die 3MF Datei des ausgewählten Objekts genutzt.",
+        "hint_base3mf": "3MF, dessen Druckparameter übernommen werden (und seine Objekte gleichen Namens).\n"
+                        "Die Liste enthält die 3MF-Dateien des Projektordners und die zuletzt verwendeten Basen;\n"
+                        "„Durchsuchen“ erlaubt die Auswahl in einem anderen Ordner.\n"
+                        "„Ohne Basis“: neue 3MF (die vorherige wird als .old gesichert).",
+        "base3mf_none": "Ohne Basis (neue 3MF)",
+        "base3mf_current": "3MF dieser Auswahl",
+        "base3mf_saved_as": "Wird gespeichert als: {name}",
 
         # Error / warning messages
         "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
@@ -664,6 +679,7 @@ def load_config():
         "linear_deflection": DEFAULT_LINEAR_DEFLECTION,
         "angular_deflection": DEFAULT_ANGULAR_DEFLECTION,
         "ignore_transform": True,  # valeur par défaut
+        "recent_base3mf": [],      # derniers 3MF utilisés comme base
     }
     config = configparser.ConfigParser()
     if os.path.exists(INI_FILE):
@@ -680,6 +696,9 @@ def load_config():
                     cfg["angular_deflection"] = deg * math.pi / 180.0
                 if "ignore_transform" in s:
                     cfg["ignore_transform"] = s.getboolean("ignore_transform", True)
+                if "recent_base3mf" in s:
+                    cfg["recent_base3mf"] = [x for x in s.get("recent_base3mf", "", raw=True).split("|")
+                                             if x.strip()]
         except Exception as e:
             print("⚠️ Erreur lecture ini:", e)
     return cfg
@@ -777,9 +796,78 @@ def save_settings(linear, angular_rad, slicer_path, ignore_transform):
     with open(INI_FILE, "w", encoding="utf-8") as f:
         f.writelines(new_lines)
 
+MAX_RECENT_BASE3MF = 8
+
+
+def set_ini_setting(key, value):
+    """Écrit (ou ajoute) `key = value` dans la section [Settings] du fichier ini."""
+    if not os.path.exists(INI_FILE):
+        return
+    with open(INI_FILE, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    new_line = f"{key} = {value}\n"
+    in_settings, done, settings_index = False, False, None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_settings = stripped.startswith("[Settings]")
+            if in_settings:
+                settings_index = i
+            continue
+        if in_settings and stripped.split("=")[0].strip() == key:
+            lines[i] = new_line
+            done = True
+            break
+    if not done:
+        if settings_index is None:
+            return
+        lines.insert(settings_index + 1, new_line)
+    with open(INI_FILE, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
+def remember_base3mf(path, recent):
+    """Ajoute `path` en tête des derniers 3MF utilisés comme base (fichier ini)."""
+    norm = os.path.normcase(os.path.abspath(path))
+    others = [p for p in recent if os.path.normcase(os.path.abspath(p)) != norm and os.path.exists(p)]
+    set_ini_setting("recent_base3mf", "|".join([os.path.abspath(path)] + others[:MAX_RECENT_BASE3MF - 1]))
+
+
+def list_base3mf_choices(fc_3mf, recent):
+    """
+    3MF proposés comme base : (chemin, texte affiché).
+    D'abord ceux du dossier du projet (le plus récent en premier, sans les
+    sauvegardes .old), puis les dernières bases utilisées ailleurs.
+    """
+    folder = os.path.dirname(os.path.abspath(fc_3mf))
+    choices, seen = [], set()
+
+    def add(path, label):
+        key = os.path.normcase(os.path.abspath(path))
+        if key not in seen:
+            seen.add(key)
+            choices.append((os.path.abspath(path), label))
+
+    if os.path.exists(fc_3mf):
+        add(fc_3mf, f"{os.path.basename(fc_3mf)}   ({tr('base3mf_current')})")
+    try:
+        local = [os.path.join(folder, f) for f in os.listdir(folder)
+                 if f.lower().endswith(".3mf") and ".old." not in f.lower()
+                 and not f.lower().endswith(".old.3mf")]
+    except OSError:
+        local = []
+    local.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    for p in local:
+        add(p, os.path.basename(p))
+    for p in recent:
+        if os.path.exists(p):
+            add(p, f"{os.path.basename(p)}   —   {os.path.dirname(os.path.abspath(p))}")
+    return choices
+
+
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
 def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref,
-                     default_fc_3mf):
+                     default_fc_3mf, recent_base3mf=()):
     """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
     dialog = QtGui.QDialog()
     dialog.setWindowTitle(tr("options_title"))
@@ -841,31 +929,51 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
 
     h_base3mf.addWidget(lbl_base3mf)
 
-    edit_base3mf = QtGui.QLineEdit(default_fc_3mf)
-    edit_base3mf.setToolTip(tr("hint_base3mf"))
-
-    edit_base3mf.setMinimumWidth(420)
-    h_base3mf.addWidget(edit_base3mf, stretch=1)
+    # Liste : « Sans base », 3MF du dossier du projet, dernières bases utilisées
+    combo_base3mf = QtGui.QComboBox()
+    combo_base3mf.setToolTip(tr("hint_base3mf"))
+    combo_base3mf.setMinimumWidth(420)
+    combo_base3mf.addItem(tr("base3mf_none"), "")
+    for path, label in list_base3mf_choices(default_fc_3mf, recent_base3mf):
+        combo_base3mf.addItem(label, path)
+        combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
+    # Par défaut : le 3MF de cette sélection s'il existe, sinon « Sans base »
+    if os.path.exists(default_fc_3mf):
+        combo_base3mf.setCurrentIndex(1)
+    h_base3mf.addWidget(combo_base3mf, stretch=1)
     btn_base3mf = QtGui.QPushButton(tr("browse"))
 
     def browse_base3mf():
-        fcstd_dir = os.path.dirname(FreeCAD.ActiveDocument.FileName) \
-            if FreeCAD.ActiveDocument and FreeCAD.ActiveDocument.FileName else ""
-
         path, _ = QtGui.QFileDialog.getOpenFileName(
             dialog,
             tr("base3mf_dialog_title"),
-            fcstd_dir,
+            os.path.dirname(os.path.abspath(default_fc_3mf)),
             tr("base3mf_filter")
         )
-
-        if path:
-            edit_base3mf.setText(path)
+        if not path:
+            return
+        path = os.path.abspath(path)
+        for i in range(combo_base3mf.count()):
+            data = combo_base3mf.itemData(i)
+            if data and os.path.normcase(data) == os.path.normcase(path):
+                combo_base3mf.setCurrentIndex(i)
+                return
+        combo_base3mf.addItem(f"{os.path.basename(path)}   —   {os.path.dirname(path)}", path)
+        combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
+        combo_base3mf.setCurrentIndex(combo_base3mf.count() - 1)
 
     btn_base3mf.clicked.connect(browse_base3mf)
     h_base3mf.addWidget(btn_base3mf)
 
     layout.addLayout(h_base3mf)
+
+    # Nom du 3MF qui sera écrit
+    lbl_saved_as = QtGui.QLabel(tr("base3mf_saved_as").format(name=os.path.basename(default_fc_3mf)))
+    lbl_saved_as.setToolTip(default_fc_3mf)
+    h_saved_as = QtGui.QHBoxLayout()
+    h_saved_as.addSpacing(chk_launch.width())
+    h_saved_as.addWidget(lbl_saved_as, stretch=1)
+    layout.addLayout(h_saved_as)
 
     # Précision linéaire
     h_lin = QtGui.QHBoxLayout()
@@ -962,7 +1070,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         return (
             chk_stl.isChecked(),
             edit_slicer.text(),
-            edit_base3mf.text(),
+            combo_base3mf.itemData(combo_base3mf.currentIndex()) or "",
             chk_launch.isChecked(),
             linear_val,
             angular_rad,
@@ -1004,7 +1112,8 @@ def get_user_options(cfg, fc_3mf):
          slicer_path, base3mf_path, launch_slicer,
          linear_value, angular_value, reset_all,
          ignore_transform, extra_cmds) = ask_user_options(
-            slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf
+            slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf,
+            cfg.get("recent_base3mf", [])
         )
 
         # Annulation
@@ -1029,6 +1138,15 @@ def get_user_options(cfg, fc_3mf):
         ignore_transform = ignore_transform
 
     )
+
+    # Base prise hors du dossier du projet : mémorisée pour la liste
+    if base3mf_path and os.path.exists(base3mf_path) and (
+            os.path.normcase(os.path.dirname(os.path.abspath(base3mf_path)))
+            != os.path.normcase(os.path.dirname(os.path.abspath(fc_3mf)))):
+        try:
+            remember_base3mf(base3mf_path, cfg.get("recent_base3mf", []))
+        except Exception as e:
+            print("⚠️ Erreur écriture ini:", e)
 
     return (
         generate_stl,
@@ -1726,6 +1844,36 @@ def _keep_transform(item_transform, local_vertices, component):
 # ------------------------------------------------------------
 # Écriture
 # ------------------------------------------------------------
+def _rename_object(text, texts, obj_id, new_name, old_name=None):
+    """
+    Donne le nom `new_name` à l'objet `obj_id`, là où le slicer le lit
+    (ainsi qu'à ses pièces qui portaient l'ancien nom de l'objet).
+    """
+    value = _xml_escape(new_name)
+    has_cfg = text(PRUSA_CONFIG) is not None or text(BAMBU_CONFIG) is not None
+    model = text(MODEL_PATH)
+    start, end = _find_block(model, _OBJECT_RE, "id", obj_id)
+    block = model[start:end]
+    if _attr(_start_tag(block), "name") is not None or not has_cfg:
+        texts[MODEL_PATH] = model[:start] + _set_attr(block, "name", value) + model[end:]
+    for cfg_name in (PRUSA_CONFIG, BAMBU_CONFIG):
+        cfg = text(cfg_name)
+        span = _find_block(cfg, _OBJECT_RE, "id", obj_id) if cfg is not None else None
+        if not span:
+            continue
+        block = cfg[span[0]:span[1]]
+        old_xml = _xml_escape(old_name) if old_name else None
+        first = [True]
+
+        def rename(m):
+            # 1er nom du bloc = nom de l'objet ; les suivants = noms des pièces
+            if first[0] or m.group(1) == old_xml:
+                first[0] = False
+                return m.group(0)[:m.start(1) - m.start(0)] + value + m.group(0)[m.end(1) - m.start(0):]
+            return m.group(0)
+        texts[cfg_name] = cfg[:span[0]] + _NAME_META_RE.sub(rename, block) + cfg[span[1]:]
+
+
 def _new_uuid():
     import uuid
     return str(uuid.uuid4())
@@ -1891,6 +2039,12 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform):
                 lambda m: _set_attr(m.group(0), "transform", new_t)
                 if _attr(m.group(0), "object_id") == so.obj_id else m.group(0), cfg)
             texts[BAMBU_CONFIG] = cfg
+
+        # Objet repris sous un autre nom (1 seul objet sélectionné, aucun nom
+        # identique) : il prend le nom de l'objet FreeCAD, pour être reconnu
+        # par son nom aux exports suivants
+        if so.name != part.name:
+            _rename_object(text, texts, so.obj_id, part.name, so.name)
 
     # ---- 2) Objets du slicer qui ne sont plus dans la sélection ----
     removed = [so for so in slicer_objects if so.obj_id not in matched_ids]
@@ -2589,13 +2743,19 @@ def export_replace_geometry():
 
     # ------------------------------------------------------------
     # 3) Si l’utilisateur a choisi un 3MF de base, on le copie sur fc_3mf
+    #    (« Sans base » : nouveau 3MF). Un 3MF existant remplacé est
+    #    d'abord sauvegardé (base_name.old.date.3mf).
     # ------------------------------------------------------------
+    backed_up = False
     if base3mf_path and os.path.exists(base3mf_path):
         try:
             if os.path.exists(fc_3mf) and os.path.samefile(base3mf_path, fc_3mf):
                 if DEBUG:
                     print("Le fichier 3MF de base est identique au fichier de travail, aucune copie nécessaire.")
             else:
+                if os.path.exists(fc_3mf):
+                    rotate_old_backups(base_name, MAX_OLD_BACKUPS)
+                    backed_up = True
                 shutil.copy(base3mf_path, fc_3mf)
                 fc_3mf_existed_at_start = True
                 if DEBUG:
@@ -2604,6 +2764,11 @@ def export_replace_geometry():
         except Exception as e:
             if DEBUG:
                 print("Erreur lors de la copie du 3MF de base :", e)
+    elif os.path.exists(fc_3mf):
+        # « Sans base » alors que le 3MF de cette sélection existe : nouveau 3MF
+        rotate_old_backups(base_name, MAX_OLD_BACKUPS)
+        backed_up = True
+        fc_3mf_existed_at_start = False
 
     if DEBUG:
         print("Objets :", names)
@@ -2620,7 +2785,8 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 5) Rotation des backups
     # ------------------------------------------------------------
-    rotate_old_backups(base_name, MAX_OLD_BACKUPS)
+    if not backed_up:
+        rotate_old_backups(base_name, MAX_OLD_BACKUPS)
 
     # ------------------------------------------------------------
     # 6) Sauvegarde de l’ancien 3MF officiel
