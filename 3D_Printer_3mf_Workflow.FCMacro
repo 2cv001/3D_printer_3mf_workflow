@@ -210,6 +210,15 @@ TRANSLATIONS = {
                            "FreeCAD restera bloqué pendant ce temps.\n\n"
                            "Continuer quand même ?",
         "btn_back_options": "Revenir aux options",
+        "export_estimate": "Export estimé : environ {tri} triangles, {time}, 3MF de {size}",
+        "export_estimate_pending": "Export estimé : calcul en cours…",
+        "export_estimate_failed": "Export estimé : estimation impossible",
+        "target_time_label": "Temps d'export visé :",
+        "btn_optimize": "Optimiser la finesse",
+        "hint_optimize": "Choisit la précision et la tolérance angulaire les plus fines dont\n"
+                         "l'export estimé tient dans ce temps, en gardant leur rapport.\n"
+                         "Jamais plus fin que 0,01 mm et 2° : en dessous, l'impression ne change plus.\n"
+                         "L'estimation se recale à chaque export sur cette machine.",
         "unit_million": "{n} millions de",
         "unit_billion": "{n} milliards de",
         "unit_mb": "{n} Mo",
@@ -343,6 +352,15 @@ TRANSLATIONS = {
                            "FreeCAD will be frozen meanwhile.\n\n"
                            "Continue anyway?",
         "btn_back_options": "Back to options",
+        "export_estimate": "Estimated export: about {tri} triangles, {time}, 3MF of {size}",
+        "export_estimate_pending": "Estimated export: computing…",
+        "export_estimate_failed": "Estimated export: estimate not available",
+        "target_time_label": "Target export time:",
+        "btn_optimize": "Optimize fineness",
+        "hint_optimize": "Chooses the finest precision and angular tolerance whose estimated\n"
+                         "export fits in this time, keeping their ratio.\n"
+                         "Never finer than 0.01 mm and 2°: below that, the print does not change.\n"
+                         "The estimate adjusts itself after each export on this machine.",
         "unit_million": "{n} million",
         "unit_billion": "{n} billion",
         "unit_mb": "{n} MB",
@@ -478,6 +496,15 @@ TRANSLATIONS = {
                            "FreeCAD ist währenddessen blockiert.\n\n"
                            "Trotzdem fortfahren?",
         "btn_back_options": "Zurück zu den Optionen",
+        "export_estimate": "Geschätzter Export: etwa {tri} Dreiecke, {time}, 3MF von {size}",
+        "export_estimate_pending": "Geschätzter Export: wird berechnet…",
+        "export_estimate_failed": "Geschätzter Export: keine Schätzung möglich",
+        "target_time_label": "Angestrebte Exportzeit:",
+        "btn_optimize": "Feinheit optimieren",
+        "hint_optimize": "Wählt die feinste Genauigkeit und Winkeltoleranz, deren geschätzter\n"
+                         "Export in diese Zeit passt, bei gleichem Verhältnis.\n"
+                         "Nie feiner als 0,01 mm und 2°: darunter ändert sich der Druck nicht mehr.\n"
+                         "Die Schätzung passt sich nach jedem Export an diesen Rechner an.",
         "unit_million": "{n} Millionen",
         "unit_billion": "{n} Milliarden",
         "unit_mb": "{n} MB",
@@ -1104,7 +1131,7 @@ def base3mf_other_labels(paths):
 
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
 def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref,
-                     default_fc_3mf, recent_base3mf=(), selected_names=()):
+                     default_fc_3mf, recent_base3mf=(), selected_names=(), selection=()):
     """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
     dialog = QtGui.QDialog()
     dialog.setWindowTitle(tr("options_title"))
@@ -1313,6 +1340,82 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     h_ang.addStretch()
     layout.addLayout(h_ang)
 
+    # Export estimé (mis à jour en direct) et « Optimiser la finesse »
+    lbl_estimate = QtGui.QLabel(tr("export_estimate_pending"))
+    lbl_estimate.setWordWrap(True)
+    h_estimate = QtGui.QHBoxLayout()
+    h_estimate.addSpacing(20)
+    h_estimate.addWidget(lbl_estimate, stretch=1)
+    layout.addLayout(h_estimate)
+
+    h_target = QtGui.QHBoxLayout()
+    lbl_target = QtGui.QLabel(tr("target_time_label"))
+    lbl_target.setToolTip(tr("hint_optimize"))
+    h_target.addWidget(lbl_target)
+    spin_target = QtGui.QSpinBox()
+    spin_target.setRange(1, 3600)
+    spin_target.setValue(get_target_export_seconds())
+    spin_target.setMaximumWidth(80)
+    spin_target.setToolTip(tr("hint_optimize"))
+    h_target.addWidget(spin_target)
+    h_target.addWidget(QtGui.QLabel("s"))
+    btn_optimize = QtGui.QPushButton(tr("btn_optimize"))
+    btn_optimize.setToolTip(tr("hint_optimize"))
+    btn_optimize.setEnabled(False)
+    h_target.addWidget(btn_optimize)
+    h_target.addStretch()
+    layout.addLayout(h_target)
+
+    cost = {"model": None}
+
+    def update_estimate(*_args):
+        model = cost["model"]
+        if model is None:
+            return
+        n, seconds = model.estimate(float(spin_lin.value()),
+                                    math.radians(float(spin_ang.value())))
+        lbl_estimate.setText(tr("export_estimate").format(
+            tri=_format_triangles(n), time=_format_duration(seconds),
+            size=_format_size(n * BYTES_PER_TRIANGLE)))
+        heavy = n > HEAVY_MESH_TRIANGLES or seconds > HEAVY_MESH_SECONDS
+        lbl_estimate.setStyleSheet("color: #d97706;" if heavy else "")
+
+    def build_estimate():
+        # Après l'affichage de la fenêtre : les maillages d'essai prennent
+        # en général moins d'une seconde
+        QtGui.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            model = build_mesh_cost_model(selection, float(spin_lin.value()),
+                                          math.radians(float(spin_ang.value())))
+        finally:
+            QtGui.QApplication.restoreOverrideCursor()
+        cost["model"] = model
+        remember_mesh_cost_model(selection, model)
+        if model is None:
+            lbl_estimate.setText(tr("export_estimate_failed"))
+            return
+        btn_optimize.setEnabled(True)
+        update_estimate()
+
+    def optimize():
+        model = cost["model"]
+        if model is None:
+            return
+        linear, angular = model.optimize(float(spin_target.value()), float(spin_lin.value()),
+                                         math.radians(float(spin_ang.value())))
+        # Arrondi vers le plus grossier, pour rester dans le temps visé
+        spin_lin.setValue(math.ceil(linear * 100 - 1e-9) / 100)
+        spin_ang.setValue(math.ceil(math.degrees(angular) * 100 - 1e-9) / 100)
+        update_estimate()
+
+    spin_lin.valueChanged.connect(update_estimate)
+    spin_ang.valueChanged.connect(update_estimate)
+    btn_optimize.clicked.connect(optimize)
+    if selection:
+        QtCore.QTimer.singleShot(0, build_estimate)
+    else:
+        lbl_estimate.setText("")
+
     # Cases pour les commandes externes
     extra_checks = []
     if EXTRA_COMMANDS:
@@ -1355,6 +1458,10 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     btns.rejected.connect(dialog.reject)
 
     if dialog.exec() == QtGui.QDialog.Accepted:
+        try:
+            set_ini_setting("target_export_seconds", str(int(spin_target.value())))
+        except Exception:
+            pass
         linear_val = float(spin_lin.value())
         angular_deg = float(spin_ang.value())
         angular_rad = angular_deg * math.pi / 180.0
@@ -1374,7 +1481,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     else:
         return (None, None, None, None, None, None, None, None, [])
 
-def get_user_options(cfg, fc_3mf, names=()):
+def get_user_options(cfg, fc_3mf, names=(), selection=()):
     """
     Affiche la boîte de dialogue utilisateur :
     - paramètres FreeCAD
@@ -1404,7 +1511,7 @@ def get_user_options(cfg, fc_3mf, names=()):
          linear_value, angular_value, reset_all,
          ignore_transform, extra_cmds) = ask_user_options(
             slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf,
-            cfg.get("recent_base3mf", []), names
+            cfg.get("recent_base3mf", []), names, selection
         )
 
         # Annulation
@@ -1761,6 +1868,16 @@ BYTES_PER_TRIANGLE = 80
 ESTIMATE_FACTORS = (256, 64, 16, 4)
 ESTIMATE_MAX_TRIAL_FACETS = 60_000
 MAX_ANGULAR_DEFLECTION = 1.0   # radians
+# « Optimiser la finesse » : jamais plus fin que ces planchers (en dessous,
+# l'impression ne change plus : buse de 0,4 mm, couches de 0,1 à 0,2 mm)
+OPTIMIZE_MIN_LINEAR = 0.01                    # mm
+OPTIMIZE_MIN_ANGULAR = math.radians(2.0)
+OPTIMIZE_MAX_LINEAR = 10.0                    # limites des champs de la fenêtre
+OPTIMIZE_MAX_ANGULAR = math.radians(90.0)
+DEFAULT_TARGET_EXPORT_SECONDS = 20
+# Recalage du temps estimé selon la machine
+MESH_TIME_FACTOR_MIN, MESH_TIME_FACTOR_MAX = 0.2, 20.0
+MESH_TIME_MIN_SECONDS = 2.0
 
 
 def _count_facets(shape, linear, angular):
@@ -1769,13 +1886,14 @@ def _count_facets(shape, linear, angular):
     return max(m.CountFacets, 1)
 
 
-def _extrapolate(shape, target, mesh_args, cap=None):
+def _fit_law(shape, target, mesh_args, cap=None):
     """
-    Nombre de triangles au réglage `target`, prolongé à partir de maillages
+    Loi « nombre de triangles selon un réglage », mesurée par des maillages
     d'essai où seul ce réglage varie (`mesh_args(valeur)` donne les deux
-    réglages de l'essai). Le nombre de triangles suit à peu près une
-    puissance du réglage ; la loi est prise sur les deux essais les plus fins.
-    Un essai n'est lancé que si sa taille prévue reste raisonnable.
+    réglages de l'essai), du plus grossier au plus fin tant que l'essai
+    suivant reste léger. Le nombre de triangles suit à peu près une puissance
+    du réglage, prise sur les deux essais les plus fins.
+    Retourne (valeur, triangles, puissance) : n(x) = triangles * (valeur / x) ** puissance.
     """
     values = []
     for k in ESTIMATE_FACTORS:
@@ -1783,8 +1901,8 @@ def _extrapolate(shape, target, mesh_args, cap=None):
         if not values or v < values[-1]:
             values.append(v)
     if len(values) == 1:
-        # Réglage déjà grossier : l'essai au réglage demandé est léger
-        return _count_facets(shape, *mesh_args(target))
+        # Réglage déjà grossier : un essai au réglage demandé suffit
+        return (target, _count_facets(shape, *mesh_args(target)), 2.0)
 
     trials = []
     for v in values:
@@ -1806,37 +1924,171 @@ def _extrapolate(shape, target, mesh_args, cap=None):
         power = min(max(math.log(n_last / n0) / math.log(v0 / v_last), 0.0), 2.5)
     else:
         power = 2.0   # prudent
-    return n_last * (v_last / target) ** power
+    return (v_last, n_last, power)
 
 
-def estimate_mesh_cost(selection, linear_deflection, angular_deflection):
+def _law_value(law, x):
+    v, n, power = law
+    return n * (v / max(x, 1e-9)) ** power
+
+
+class MeshCostModel:
     """
-    Estime, avant le vrai maillage, le nombre de triangles et la durée.
+    Coût du maillage des objets sélectionnés, pour n'importe quels réglages :
+    une fois les lois mesurées (moins d'une seconde), une estimation n'est
+    qu'un calcul, d'où l'affichage en direct dans la fenêtre d'options.
     Le nombre de triangles dépend de deux réglages, chacun pouvant être celui
-    qui limite : la précision et la tolérance angulaire. Pour chacun, des
-    maillages d'essai plus grossiers (l'autre réglage rendu sans effet)
-    donnent sa loi, prolongée jusqu'au réglage demandé ; on garde le plus
-    grand des deux. Rapide et approximatif : sert seulement à repérer un
-    réglage beaucoup trop fin.
-    Retourne (triangles, secondes) ; (0, 0) si l'estimation échoue.
+    qui limite : on garde, pour chaque objet, le plus grand des deux.
+    """
+
+    def __init__(self, laws, time_factor=1.0):
+        self.laws = laws                  # [(loi précision, loi angle)] par objet
+        self.time_factor = time_factor    # recalage propre à la machine (fichier ini)
+
+    def triangles(self, linear_deflection, angular_deflection):
+        return sum(max(_law_value(lin, linear_deflection), _law_value(ang, angular_deflection))
+                   for lin, ang in self.laws)
+
+    @staticmethod
+    def base_seconds(n_triangles):
+        """Durée avant recalage : de plus en plus chère par triangle quand le maillage grossit."""
+        return (n_triangles * SECONDS_PER_TRIANGLE
+                * max(1.0, math.sqrt(n_triangles / TRIANGLES_REFERENCE)))
+
+    def estimate(self, linear_deflection, angular_deflection):
+        """(triangles, secondes) pour ces réglages (angle en radians)."""
+        n = self.triangles(linear_deflection, angular_deflection)
+        return int(n), self.base_seconds(n) * self.time_factor
+
+    def optimize(self, target_seconds, linear_deflection, angular_deflection,
+                 min_linear=None, min_angular=None):
+        """
+        Réglages les plus fins dont la durée estimée tient dans `target_seconds`,
+        en gardant le rapport entre précision et tolérance angulaire, sans
+        descendre sous les planchers (en dessous, l'impression ne change plus).
+        Retourne (précision, angle en radians).
+        """
+        min_linear = OPTIMIZE_MIN_LINEAR if min_linear is None else min_linear
+        min_angular = OPTIMIZE_MIN_ANGULAR if min_angular is None else min_angular
+
+        def settings(scale):
+            return (min(max(linear_deflection * scale, min_linear), OPTIMIZE_MAX_LINEAR),
+                    min(max(angular_deflection * scale, min_angular), OPTIMIZE_MAX_ANGULAR))
+
+        def fits(scale):
+            return self.estimate(*settings(scale))[1] <= target_seconds
+
+        # Plus le facteur est petit, plus c'est fin : on cherche le plus petit qui tient
+        lo, hi = math.log(1e-4), math.log(1e4)
+        if fits(math.exp(lo)):
+            return settings(math.exp(lo))
+        if not fits(math.exp(hi)):
+            return settings(math.exp(hi))
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            if fits(math.exp(mid)):
+                hi = mid
+            else:
+                lo = mid
+        return settings(math.exp(hi))
+
+
+def build_mesh_cost_model(selection, linear_deflection, angular_deflection):
+    """
+    Mesure les lois de chaque objet sélectionné autour des réglages donnés.
+    Retourne un MeshCostModel, ou None si la mesure échoue.
     """
     d, a = float(linear_deflection), float(angular_deflection)
-    total = 0.0
+    laws = []
     try:
         for obj in selection:
             shape = global_shape(obj)
             diag = max(shape.BoundBox.DiagonalLength, 1e-6)
             # Effet de la précision seule (tolérance angulaire sans effet)
-            n_lin = _extrapolate(shape, d, lambda v: (v, MAX_ANGULAR_DEFLECTION))
+            lin = _fit_law(shape, d, lambda v: (v, MAX_ANGULAR_DEFLECTION))
             # Effet de la tolérance angulaire seule (précision grossière)
             coarse = max(d, diag / 200)
-            n_ang = _extrapolate(shape, a, lambda v: (coarse, v), cap=MAX_ANGULAR_DEFLECTION)
-            total += max(n_lin, n_ang)
+            ang = _fit_law(shape, a, lambda v: (coarse, v), cap=MAX_ANGULAR_DEFLECTION)
+            laws.append((lin, ang))
     except Exception as e:
         if DEBUG: print("⚠️ Estimation du maillage impossible :", e)
+        return None
+    return MeshCostModel(laws, get_mesh_time_factor())
+
+
+def estimate_mesh_cost(selection, linear_deflection, angular_deflection):
+    """(triangles, secondes) estimés ; (0, 0) si l'estimation échoue."""
+    model = build_mesh_cost_model(selection, linear_deflection, angular_deflection)
+    if model is None:
         return 0, 0
-    seconds = total * SECONDS_PER_TRIANGLE * max(1.0, math.sqrt(total / TRIANGLES_REFERENCE))
-    return int(total), seconds
+    return model.estimate(linear_deflection, angular_deflection)
+
+
+def get_mesh_time_factor():
+    """Recalage du temps estimé, appris sur cette machine (fichier ini)."""
+    try:
+        config = configparser.ConfigParser()
+        config.read(INI_FILE)
+        value = float(config["Settings"].get("mesh_time_factor", "1"))
+        return min(max(value, MESH_TIME_FACTOR_MIN), MESH_TIME_FACTOR_MAX)
+    except Exception:
+        return 1.0
+
+
+def update_mesh_time_factor(model, linear_deflection, angular_deflection, real_seconds):
+    """
+    Après un vrai maillage : rapproche le recalage du rapport temps réel /
+    temps estimé (moyenne géométrique avec l'ancien, pour lisser), et
+    l'enregistre. Ignoré pour les maillages trop courts (peu représentatifs).
+    """
+    if model is None:
+        return
+    n = model.triangles(linear_deflection, angular_deflection)
+    base = MeshCostModel.base_seconds(n)
+    if base < MESH_TIME_MIN_SECONDS or real_seconds <= 0:
+        return
+    ratio = real_seconds / base
+    factor = math.sqrt(model.time_factor * ratio)
+    factor = min(max(factor, MESH_TIME_FACTOR_MIN), MESH_TIME_FACTOR_MAX)
+    try:
+        set_ini_setting("mesh_time_factor", f"{factor:.3f}")
+    except Exception:
+        pass
+    if DEBUG:
+        print(f"Recalage du temps : réel {real_seconds:.1f} s, estimé {base:.1f} s "
+              f"→ facteur {factor:.2f}")
+
+
+def get_target_export_seconds():
+    try:
+        config = configparser.ConfigParser()
+        config.read(INI_FILE)
+        return max(1, int(float(config["Settings"].get("target_export_seconds",
+                                                        str(DEFAULT_TARGET_EXPORT_SECONDS)))))
+    except Exception:
+        return DEFAULT_TARGET_EXPORT_SECONDS
+
+
+# Modèle calculé dans la fenêtre d'options, réutilisé ensuite pour la même sélection
+_MESH_COST_MODEL = {"key": None, "model": None}
+
+
+def _selection_key(selection):
+    try:
+        return tuple((o.Document.Name, o.Name) for o in selection)
+    except Exception:
+        return None
+
+
+def remember_mesh_cost_model(selection, model):
+    _MESH_COST_MODEL["key"] = _selection_key(selection)
+    _MESH_COST_MODEL["model"] = model
+
+
+def cached_mesh_cost_model(selection):
+    if _MESH_COST_MODEL["key"] is not None and _MESH_COST_MODEL["key"] == _selection_key(selection):
+        return _MESH_COST_MODEL["model"]
+    return None
 
 
 def _format_duration(seconds):
@@ -3262,6 +3514,9 @@ def export_replace_geometry():
     print("_________________________________")
     print('\n\n>>> MACRO 3D_printer_3mf_workflow <<<')
 
+    # Estimation du maillage : recalculée à chaque passage (la géométrie a pu changer)
+    remember_mesh_cost_model((), None)
+
     # ------------------------------------------------------------
     # 1) Préparation de l’environnement
     # ------------------------------------------------------------
@@ -3275,7 +3530,7 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 2) Préférences utilisateur
     # ------------------------------------------------------------
-    opts = get_user_options(cfg, fc_3mf, names)
+    opts = get_user_options(cfg, fc_3mf, names, selection)
     if opts is None:
         return
 
@@ -3295,7 +3550,11 @@ def export_replace_geometry():
 
     # Maillage très fin : on prévient avant de bloquer FreeCAD longtemps.
     # « Revenir aux options » rouvre la fenêtre (rien n'a encore été écrit).
-    est_triangles, est_seconds = estimate_mesh_cost(selection, linear_value, angular_value)
+    cost_model = cached_mesh_cost_model(selection)
+    if cost_model is None:
+        cost_model = build_mesh_cost_model(selection, linear_value, angular_value)
+    est_triangles, est_seconds = (cost_model.estimate(linear_value, angular_value)
+                                  if cost_model else (0, 0))
     if DEBUG:
         print(f"Estimation du maillage : {est_triangles} triangles, {est_seconds:.1f} s")
     if est_triangles > HEAVY_MESH_TRIANGLES or est_seconds > HEAVY_MESH_SECONDS:
@@ -3361,10 +3620,13 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 7) Maillage FreeCAD (+ STL éventuel). Aucun 3MF écrit ici.
     # ------------------------------------------------------------
+    t_mesh = time.perf_counter()
     parts = export_freecad_files(selection, names, base_name, generate_stl,
                                  linear_value, angular_value)
     if parts is None:
         return
+    update_mesh_time_factor(cost_model, linear_value, angular_value,
+                            time.perf_counter() - t_mesh)
 
     # ------------------------------------------------------------
     # 8) Injection dans le 3MF du slicer (en mémoire), ou 3MF FreeCAD seul

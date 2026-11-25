@@ -145,6 +145,24 @@ triangles, it asks first: **Continue** or **Back to options** to choose
 coarser values. The estimate is approximate, but enough to spot a value that is
 much too fine.
 
+### Estimated export and fineness optimization
+
+Below the precision and angular tolerance fields, **Estimated export** shows
+the number of triangles, the time and the 3MF size for the selected objects. It
+is computed when the window opens (usually in less than a second) and updated
+live while you change the values; it turns orange above the warning limits.
+
+**Optimize fineness** chooses the finest precision and angular tolerance whose
+estimated export fits in the **Target export time** (remembered between
+sessions), keeping the ratio between the two values. It never goes below
+0.01 mm and 2°: below that, the printed part does not change (0.4 mm nozzle,
+0.1 to 0.2 mm layers), only the file and the time grow. You can still type finer
+values yourself.
+
+The time estimate adjusts itself to your computer: after each export, the real
+meshing time is compared with the estimate and a correction factor is kept in
+the .ini file.
+
 
 
 <img width="550" height="363" alt="image" src="https://github.com/user-attachments/assets/8d597779-a934-4ad4-9c66-3bbc3c463bba" />
