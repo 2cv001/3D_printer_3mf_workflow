@@ -1,0 +1,5 @@
+tests/out/
+3D_Printer_3mf_Workflow.ini
+.idea/
+__pycache__/
+tests/fixtures/*.3mf

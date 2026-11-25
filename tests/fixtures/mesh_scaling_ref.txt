@@ -1,0 +1,76 @@
+== sphere50
+  d=0.1    ang=3°  réel    29394 tri  maillage   0.48s total   0.62s | estim      4052 p=0.94 ratio 0.14 | µs/tri 21.0 | o/tri 76
+  d=0.05   ang=3°  réel    29394 tri  maillage   0.78s total   0.84s | estim      9803 p=0.99 ratio 0.33 | µs/tri 28.7 | o/tri 76
+  d=0.02   ang=3°  réel    29394 tri  maillage   0.65s total   0.76s | estim     26678 p=1.03 ratio 0.91 | µs/tri 25.7 | o/tri 76
+  d=0.01   ang=3°  réel    50450 tri  maillage   1.41s total   1.55s | estim     49512 p=0.99 ratio 0.98 | µs/tri 30.8 | o/tri 77
+  d=0.005  ang=3°  réel   100518 tri  maillage   3.81s total   4.12s | estim    104433 p=1.01 ratio 1.04 | µs/tri 41.0 | o/tri 78
+  d=0.002  ang=3°  réel   251048 tri  maillage  13.30s total  13.87s | estim    248877 p=1.00 ratio 0.99 | µs/tri 55.2 | o/tri 79
+  d=0.001  ang=3°  réel   502750 tri  maillage  40.42s total  41.53s | estim    501248 p=1.00 ratio 1.00 | µs/tri 82.6 | o/tri 80
+  d=0.1    ang=1°  réel   265172 tri  maillage  21.95s total  22.60s | estim    199025 p=1.88 ratio 0.75 | µs/tri 85.2 | o/tri 79
+  d=0.05   ang=1°  réel   265172 tri  maillage  20.45s total  21.01s | estim     48535 p=1.37 ratio 0.18 | µs/tri 79.2 | o/tri 79
+  d=0.02   ang=1°  réel   265172 tri  maillage  13.21s total  13.84s | estim     26471 p=1.03 ratio 0.10 | µs/tri 52.2 | o/tri 79
+  d=0.01   ang=1°  réel   265172 tri  maillage  11.65s total  12.29s | estim     49512 p=0.99 ratio 0.19 | µs/tri 46.3 | o/tri 79
+  d=0.005  ang=1°  réel   265172 tri  maillage  11.79s total  12.49s | estim    104433 p=1.01 ratio 0.39 | µs/tri 47.1 | o/tri 79
+  d=0.002  ang=1°  réel   265172 tri  maillage  14.71s total  15.29s | estim    248877 p=1.00 ratio 0.94 | µs/tri 57.7 | o/tri 79
+  d=0.001  ang=1°  réel   502774 tri  maillage  40.96s total  42.18s | estim    501248 p=1.00 ratio 1.00 | µs/tri 83.9 | o/tri 80
+== cyl20x100
+  d=0.1    ang=3°  réel      956 tri  maillage   0.01s total   0.01s | estim        76 p=0.11 ratio 0.08 | µs/tri 13.8 | o/tri 68
+  d=0.05   ang=3°  réel      956 tri  maillage   0.01s total   0.01s | estim        94 p=0.16 ratio 0.10 | µs/tri 13.1 | o/tri 68
+  d=0.02   ang=3°  réel      956 tri  maillage   0.01s total   0.01s | estim       384 p=0.50 ratio 0.40 | µs/tri 12.8 | o/tri 68
+  d=0.01   ang=3°  réel      956 tri  maillage   0.01s total   0.01s | estim       593 p=0.52 ratio 0.62 | µs/tri 13.1 | o/tri 68
+  d=0.005  ang=3°  réel      956 tri  maillage   0.01s total   0.01s | estim       817 p=0.51 ratio 0.85 | µs/tri 12.3 | o/tri 68
+  d=0.002  ang=3°  réel     1256 tri  maillage   0.01s total   0.02s | estim      1248 p=0.50 ratio 0.99 | µs/tri 12.7 | o/tri 69
+  d=0.001  ang=3°  réel     1776 tri  maillage   0.04s total   0.05s | estim      1808 p=0.51 ratio 1.02 | µs/tri 27.2 | o/tri 69
+  d=0.1    ang=1°  réel     2876 tri  maillage   0.05s total   0.05s | estim      2366 p=0.94 ratio 0.82 | µs/tri 18.1 | o/tri 70
+  d=0.05   ang=1°  réel     2876 tri  maillage   0.07s total   0.08s | estim      2366 p=0.94 ratio 0.82 | µs/tri 27.7 | o/tri 70
+  d=0.02   ang=1°  réel     2876 tri  maillage   0.06s total   0.06s | estim      2366 p=0.94 ratio 0.82 | µs/tri 20.8 | o/tri 70
+  d=0.01   ang=1°  réel     2876 tri  maillage   0.05s total   0.05s | estim      1179 p=0.69 ratio 0.41 | µs/tri 18.9 | o/tri 70
+  d=0.005  ang=1°  réel     2876 tri  maillage   0.05s total   0.05s | estim       817 p=0.51 ratio 0.28 | µs/tri 18.5 | o/tri 70
+  d=0.002  ang=1°  réel     2876 tri  maillage   0.05s total   0.06s | estim      1248 p=0.50 ratio 0.43 | µs/tri 19.7 | o/tri 70
+  d=0.001  ang=1°  réel     2876 tri  maillage   0.05s total   0.06s | estim      1808 p=0.51 ratio 0.63 | µs/tri 19.3 | o/tri 70
+== torus40_10
+  d=0.1    ang=3°  réel   115200 tri  maillage   2.90s total   3.17s | estim      1378 p=0.34 ratio 0.01 | µs/tri 27.5 | o/tri 78
+  d=0.05   ang=3°  réel   115200 tri  maillage   3.42s total   3.64s | estim      3693 p=0.57 ratio 0.03 | µs/tri 31.6 | o/tri 78
+  d=0.02   ang=3°  réel   115200 tri  maillage   3.22s total   3.51s | estim     11043 p=0.73 ratio 0.10 | µs/tri 30.5 | o/tri 78
+  d=0.01   ang=3°  réel   115200 tri  maillage   3.33s total   3.60s | estim     41420 p=0.97 ratio 0.36 | µs/tri 31.3 | o/tri 78
+  d=0.005  ang=3°  réel   151200 tri  maillage   5.93s total   6.28s | estim     88747 p=0.99 ratio 0.59 | µs/tri 41.5 | o/tri 78
+  d=0.002  ang=3°  réel   238560 tri  maillage  19.13s total  19.69s | estim    220459 p=0.99 ratio 0.92 | µs/tri 82.5 | o/tri 78
+  d=0.001  ang=3°  réel   442890 tri  maillage 127.50s total 128.59s | estim    433874 p=0.99 ratio 0.98 | µs/tri 290.3 | o/tri 80
+  d=0.1    ang=1°  réel  1036800 tri  maillage 854.15s total 856.59s | estim    581476 p=1.79 ratio 0.56 | µs/tri 826.2 | o/tri 81
+  d=0.05   ang=1°  réel  1036800 tri  maillage 529.75s total 531.52s | estim    581476 p=1.79 ratio 0.56 | µs/tri 512.7 | o/tri 81
+  d=0.02   ang=1°  réel  1036800 tri  maillage 552.60s total 554.76s | estim    245674 p=1.48 ratio 0.24 | µs/tri 535.1 | o/tri 81
+  d=0.01   ang=1°  réel  1036800 tri  maillage 878.19s total 880.68s | estim    241562 p=1.40 ratio 0.23 | µs/tri 849.4 | o/tri 81
+  d=0.005  ang=1°  réel  1036800 tri  maillage 766.66s total 769.09s | estim    173334 p=1.15 ratio 0.17 | µs/tri 741.8 | o/tri 81
+  d=0.002  ang=1°  réel  1036800 tri  maillage 616.32s total 618.24s | estim    220459 p=0.99 ratio 0.21 | µs/tri 596.3 | o/tri 81
+  d=0.001  ang=1°  réel  1036800 tri  maillage 582.35s total 584.26s | estim    433874 p=0.99 ratio 0.42 | µs/tri 563.5 | o/tri 81
+== boxfillet
+  d=0.1    ang=3°  réel    31436 tri  maillage   0.21s total   0.25s | estim       268 p=0.00 ratio 0.01 | µs/tri 8.0 | o/tri 75
+  d=0.05   ang=3°  réel    31436 tri  maillage   0.19s total   0.25s | estim       268 p=0.00 ratio 0.01 | µs/tri 7.9 | o/tri 75
+  d=0.02   ang=3°  réel    31436 tri  maillage   0.18s total   0.24s | estim       671 p=0.22 ratio 0.02 | µs/tri 7.7 | o/tri 75
+  d=0.01   ang=3°  réel    31436 tri  maillage   0.19s total   0.23s | estim      2003 p=0.48 ratio 0.06 | µs/tri 7.4 | o/tri 75
+  d=0.005  ang=3°  réel    31436 tri  maillage   0.20s total   0.25s | estim      6594 p=0.70 ratio 0.21 | µs/tri 8.1 | o/tri 75
+  d=0.002  ang=3°  réel    31436 tri  maillage   0.21s total   0.27s | estim     23135 p=0.91 ratio 0.74 | µs/tri 8.6 | o/tri 75
+  d=0.001  ang=3°  réel    53500 tri  maillage   0.40s total   0.49s | estim     43128 p=0.87 ratio 0.81 | µs/tri 9.2 | o/tri 76
+  d=0.1    ang=1°  réel   271804 tri  maillage   3.52s total   3.96s | estim     63688 p=1.32 ratio 0.23 | µs/tri 14.6 | o/tri 78
+  d=0.05   ang=1°  réel   271804 tri  maillage   3.29s total   3.74s | estim     63688 p=1.32 ratio 0.23 | µs/tri 13.8 | o/tri 78
+  d=0.02   ang=1°  réel   271804 tri  maillage   3.40s total   3.84s | estim     63688 p=1.32 ratio 0.23 | µs/tri 14.1 | o/tri 78
+  d=0.01   ang=1°  réel   271804 tri  maillage   3.22s total   3.65s | estim     63688 p=1.32 ratio 0.23 | µs/tri 13.4 | o/tri 78
+  d=0.005  ang=1°  réel   271804 tri  maillage   3.24s total   3.67s | estim     34524 p=1.09 ratio 0.13 | µs/tri 13.5 | o/tri 78
+  d=0.002  ang=1°  réel   271804 tri  maillage   3.56s total   4.01s | estim     26922 p=0.95 ratio 0.10 | µs/tri 14.7 | o/tri 78
+  d=0.001  ang=1°  réel   271804 tri  maillage   4.01s total   4.49s | estim     43128 p=0.87 ratio 0.16 | µs/tri 16.5 | o/tri 78
+== box
+  d=0.1    ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 121.8 | o/tri 68
+  d=0.05   ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 142.7 | o/tri 68
+  d=0.02   ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 146.6 | o/tri 68
+  d=0.01   ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 101.5 | o/tri 68
+  d=0.005  ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 120.0 | o/tri 68
+  d=0.002  ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 105.8 | o/tri 68
+  d=0.001  ang=3°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 100.9 | o/tri 68
+  d=0.1    ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 90.8 | o/tri 68
+  d=0.05   ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 104.6 | o/tri 68
+  d=0.02   ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 101.7 | o/tri 68
+  d=0.01   ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 92.7 | o/tri 68
+  d=0.005  ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 137.5 | o/tri 68
+  d=0.002  ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 90.6 | o/tri 68
+  d=0.001  ang=1°  réel       12 tri  maillage   0.00s total   0.00s | estim        12 p=0.00 ratio 1.00 | µs/tri 97.5 | o/tri 68
+FIN
