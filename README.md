@@ -35,7 +35,8 @@ The macro exports the selected objects to a 3MF file using the specified tessell
 
 ## Workflow Overview
 
-<img width="758" height="538" alt="image" src="https://github.com/user-attachments/assets/906aec99-9ee0-40b3-83de-c9d557107a57" />
+<img width="1086" height="907" alt="image" src="https://github.com/user-attachments/assets/a4bb7d4c-5e6d-402e-b2bb-730c757a543a" />
+
 
 
 ### First Launch
@@ -63,7 +64,8 @@ Run the macro from FreeCAD. The slicer path is set directly in the macro's main 
 On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or "Save" in the menu).
 
 On next launches, enjoy automatic reuse of your settings.
-<img width="1867" height="855" alt="image" src="https://github.com/user-attachments/assets/7f370b71-7b1c-4c5c-9412-b57661290b1b" />
+<img width="1811" height="814" alt="image" src="https://github.com/user-attachments/assets/abeb4cee-a33a-45f1-9a06-cba8176c124f" />
+
 
 
 ## Launching other programs or commands
@@ -83,7 +85,9 @@ A dedicated helper macro is provided to make configuration easy. Your commands a
 
 The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro).
 
-<img width="1447" height="781" alt="image" src="https://github.com/user-attachments/assets/fec17a25-ab36-4edc-a381-181ddcf055d6" />
+<img width="1134" height="805" alt="image" src="https://github.com/user-attachments/assets/86b85935-095a-40db-98c6-453d60be281e" />
+
+
 
 - Fill in the fields in the configuration window.
 - Hover your mouse over a column title to display help tooltips.
