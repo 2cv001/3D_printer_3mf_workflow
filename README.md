@@ -67,8 +67,12 @@ and objects are reused:
   full path.
 - **Browse…** picks a 3MF anywhere, for example in another project.
 
-Below the list, the macro shows the name the 3MF will be saved as. The base
-file itself is never modified; if the 3MF of the selection already exists and
+Below the list, the macro shows the name the 3MF will be saved as and explains
+what the chosen base will do: for which objects the existing settings are kept,
+which objects are new (they get the general settings), and whether the base
+has no slicer settings at all. The text turns orange when object settings may
+not be reused (no object of the base has a selected name, or "No base" while
+the 3MF of the selection exists). The base file itself is never modified; if the 3MF of the selection already exists and
 another base is chosen, it is backed up first (`.old` file).
 
 From the base, the macro always keeps the **general settings**: printer,

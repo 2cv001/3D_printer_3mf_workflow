@@ -193,6 +193,18 @@ TRANSLATIONS = {
         "base3mf_none": "Sans base (nouveau 3MF)",
         "base3mf_current": "3MF de cette sélection",
         "base3mf_saved_as": "Sera enregistré sous : {name}",
+        "base3mf_info_none": "Nouveau 3MF, géométrie seule : les réglages seront à saisir dans le slicer.",
+        "base3mf_info_backup": "L'actuel {name} sera conservé en {old}.",
+        "base3mf_info_kept_one": "Les réglages existants dans {base} seront conservés pour {names}.",
+        "base3mf_info_kept": "• Les réglages existants dans {base} seront conservés pour : {names}",
+        "base3mf_info_new": "• Nouveaux objets, avec les réglages généraux de {base} : {names}",
+        "base3mf_info_removed": "• Objets de {base} absents de la sélection, retirés : {names}",
+        "base3mf_info_renamed": "Les réglages de l'objet « {old} » de {base} seront repris pour {name}.",
+        "base3mf_info_nomatch": "Aucun objet de {base} ne porte le nom d'un objet sélectionné : "
+                                "tous les objets auront les réglages généraux de {base}.",
+        "base3mf_info_nosettings": "Ce 3MF ne contient pas de réglages de slicer : géométrie seule.",
+        "base3mf_info_unchanged": "{base} n'est pas modifié.",
+        "base3mf_info_more": "{names} et {n} autres",
 
         # Messages d'erreur / avertissement
         "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
@@ -300,6 +312,18 @@ TRANSLATIONS = {
         "base3mf_none": "No base (new 3MF)",
         "base3mf_current": "this selection's 3MF",
         "base3mf_saved_as": "Will be saved as: {name}",
+        "base3mf_info_none": "New 3MF, geometry only: the settings will have to be entered in the slicer.",
+        "base3mf_info_backup": "The current {name} will be kept as {old}.",
+        "base3mf_info_kept_one": "The existing settings in {base} will be kept for {names}.",
+        "base3mf_info_kept": "• The existing settings in {base} will be kept for: {names}",
+        "base3mf_info_new": "• New objects, with the general settings of {base}: {names}",
+        "base3mf_info_removed": "• Objects of {base} not in the selection, removed: {names}",
+        "base3mf_info_renamed": "The settings of the object \"{old}\" of {base} will be reused for {name}.",
+        "base3mf_info_nomatch": "No object of {base} has the name of a selected object: "
+                                "all objects will get the general settings of {base}.",
+        "base3mf_info_nosettings": "This 3MF contains no slicer settings: geometry only.",
+        "base3mf_info_unchanged": "{base} is not modified.",
+        "base3mf_info_more": "{names} and {n} more",
 
         # Error / warning messages
         "error_no_doc": "❌ No document open in FreeCAD.",
@@ -409,6 +433,18 @@ TRANSLATIONS = {
         "base3mf_none": "Ohne Basis (neue 3MF)",
         "base3mf_current": "3MF dieser Auswahl",
         "base3mf_saved_as": "Wird gespeichert als: {name}",
+        "base3mf_info_none": "Neue 3MF, nur Geometrie: die Einstellungen müssen im Slicer eingegeben werden.",
+        "base3mf_info_backup": "Die aktuelle {name} wird als {old} gesichert.",
+        "base3mf_info_kept_one": "Die vorhandenen Einstellungen in {base} werden für {names} beibehalten.",
+        "base3mf_info_kept": "• Die vorhandenen Einstellungen in {base} werden beibehalten für: {names}",
+        "base3mf_info_new": "• Neue Objekte, mit den allgemeinen Einstellungen von {base}: {names}",
+        "base3mf_info_removed": "• Objekte von {base}, die nicht ausgewählt sind, werden entfernt: {names}",
+        "base3mf_info_renamed": "Die Einstellungen des Objekts „{old}“ von {base} werden für {name} übernommen.",
+        "base3mf_info_nomatch": "Kein Objekt von {base} trägt den Namen eines ausgewählten Objekts: "
+                                "alle Objekte erhalten die allgemeinen Einstellungen von {base}.",
+        "base3mf_info_nosettings": "Diese 3MF enthält keine Slicer-Einstellungen: nur Geometrie.",
+        "base3mf_info_unchanged": "{base} wird nicht verändert.",
+        "base3mf_info_more": "{names} und {n} weitere",
 
         # Error / warning messages
         "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
@@ -873,27 +909,103 @@ def list_base3mf_choices(fc_3mf, recent):
     return choices
 
 
-def base3mf_object_names(path):
+def base3mf_objects(path):
     """
-    Noms des objets d'un 3MF enregistré par un slicer, lus dans ses fichiers
-    de configuration seulement (petits : les maillages ne sont pas lus).
-    Ensemble vide si le fichier n'est pas lisible ou n'a pas de configuration.
+    Objets d'un 3MF enregistré par un slicer, lus dans ses fichiers de
+    configuration seulement (petits : les maillages ne sont pas lus).
+    Retourne (a_des_réglages, noms dans l'ordre du fichier) ;
+    (False, []) si le fichier n'est pas lisible ou n'a pas de configuration.
     """
-    names = set()
+    has_settings, names = False, []
     try:
         with zipfile.ZipFile(path, "r") as z:
             available = set(z.namelist())
             for cfg in (BAMBU_CONFIG, PRUSA_CONFIG):
                 if cfg not in available:
                     continue
+                has_settings = True
                 txt = z.read(cfg).decode("utf-8", errors="replace")
                 for m in _OBJECT_RE.finditer(txt):
                     n = _NAME_META_RE.search(m.group(0))
                     if n:
-                        names.add(_xml_unescape(n.group(1)))
+                        name = _xml_unescape(n.group(1))
+                        if name not in names:
+                            names.append(name)
     except Exception:
-        pass
-    return names
+        return False, []
+    return has_settings, names
+
+
+def base3mf_object_names(path):
+    """Noms des objets d'un 3MF enregistré par un slicer (ensemble)."""
+    return set(base3mf_objects(path)[1])
+
+
+def _short_name_list(names, limit=4):
+    """« A, B, C » ; au-delà de `limit` noms : « A, B, C, D et 3 autres »."""
+    names = list(names)
+    if len(names) <= limit:
+        return ", ".join(names)
+    return tr("base3mf_info_more").format(names=", ".join(names[:limit]), n=len(names) - limit)
+
+
+def describe_base3mf(base_path, fc_3mf, selected_names):
+    """
+    Explique ce que le choix de la base va faire, pour l'afficher sous la liste.
+    Suit les règles de match_parts_to_objects (association par nom ; un seul
+    objet sélectionné sans nom identique : il reprend le premier objet).
+    Retourne (texte, avertissement, infobulle) ; `avertissement` est vrai quand
+    des réglages propres risquent de ne pas être repris.
+    """
+    selected = list(selected_names)
+    target = os.path.basename(fc_3mf)
+
+    if not base_path:
+        lines, warn = [tr("base3mf_info_none")], False
+        if os.path.exists(fc_3mf):
+            old = os.path.splitext(target)[0] + ".old.3mf"
+            lines.append(tr("base3mf_info_backup").format(name=target, old=old))
+            warn = True
+        return "\n".join(lines), warn, ""
+
+    base = os.path.basename(base_path)
+    is_current = (os.path.normcase(os.path.abspath(base_path))
+                  == os.path.normcase(os.path.abspath(fc_3mf)))
+    unchanged = [] if is_current else [tr("base3mf_info_unchanged").format(base=base)]
+    has_settings, base_names = base3mf_objects(base_path)
+
+    if not has_settings:
+        return "\n".join([tr("base3mf_info_nosettings")] + unchanged), False, ""
+
+    kept = [n for n in selected if n in base_names]
+    new = [n for n in selected if n not in base_names]
+    removed = [n for n in base_names if n not in selected]
+
+    if not kept:
+        if len(selected) == 1 and base_names:
+            line = tr("base3mf_info_renamed").format(old=base_names[0], base=base, name=selected[0])
+            return "\n".join([line] + unchanged), False, ""
+        line = tr("base3mf_info_nomatch").format(base=base)
+        return "\n".join([line] + unchanged), True, ""
+
+    if len(selected) == 1 and not (is_current and removed):
+        line = tr("base3mf_info_kept_one").format(base=base, names=kept[0])
+        return "\n".join([line] + unchanged), False, ""
+
+    lines, tips = [], []
+
+    def add(key, names):
+        lines.append(tr(key).format(base=base, names=_short_name_list(names)))
+        tips.append(tr(key).format(base=base, names=", ".join(names)))
+
+    add("base3mf_info_kept", kept)
+    if new:
+        add("base3mf_info_new", new)
+    # Une autre base n'est reprise qu'en partie, c'est normal : seuls les
+    # objets en trop dans le 3MF de la sélection sont signalés
+    if removed and is_current:
+        add("base3mf_info_removed", removed)
+    return "\n".join(lines + unchanged), False, "\n".join(tips)
 
 
 def find_base3mf_with_names(paths, selected_names):
@@ -1093,6 +1205,25 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     h_saved_as.addSpacing(chk_launch.width())
     h_saved_as.addWidget(lbl_saved_as, stretch=1)
     layout.addLayout(h_saved_as)
+
+    # Ce que le choix de la base va faire (mis à jour quand la base change)
+    lbl_base_info = QtGui.QLabel()
+    lbl_base_info.setWordWrap(True)
+    h_base_info = QtGui.QHBoxLayout()
+    h_base_info.addSpacing(chk_launch.width())
+    h_base_info.addWidget(lbl_base_info, stretch=1)
+    layout.addLayout(h_base_info)
+
+    def update_base_info(*_args):
+        text, warn, tooltip = describe_base3mf(
+            combo_base3mf.itemData(combo_base3mf.currentIndex()) or "",
+            default_fc_3mf, selected_names)
+        lbl_base_info.setText(text)
+        lbl_base_info.setToolTip(tooltip)
+        lbl_base_info.setStyleSheet("color: #d97706;" if warn else "")
+
+    combo_base3mf.currentIndexChanged.connect(update_base_info)
+    update_base_info()
 
     # Précision linéaire
     h_lin = QtGui.QHBoxLayout()
