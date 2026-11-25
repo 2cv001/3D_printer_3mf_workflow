@@ -873,6 +873,45 @@ def list_base3mf_choices(fc_3mf, recent):
     return choices
 
 
+def base3mf_object_names(path):
+    """
+    Noms des objets d'un 3MF enregistré par un slicer, lus dans ses fichiers
+    de configuration seulement (petits : les maillages ne sont pas lus).
+    Ensemble vide si le fichier n'est pas lisible ou n'a pas de configuration.
+    """
+    names = set()
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            available = set(z.namelist())
+            for cfg in (BAMBU_CONFIG, PRUSA_CONFIG):
+                if cfg not in available:
+                    continue
+                txt = z.read(cfg).decode("utf-8", errors="replace")
+                for m in _OBJECT_RE.finditer(txt):
+                    n = _NAME_META_RE.search(m.group(0))
+                    if n:
+                        names.add(_xml_unescape(n.group(1)))
+    except Exception:
+        pass
+    return names
+
+
+def find_base3mf_with_names(paths, selected_names):
+    """
+    Premier 3MF de `paths` (triés du plus récent au plus ancien) contenant
+    un objet qui porte le nom d'un objet sélectionné. Sert de base par défaut
+    quand la sélection n'a pas encore son propre 3MF, pour ne pas perdre ses
+    réglages sans s'en rendre compte.
+    """
+    wanted = set(selected_names)
+    if not wanted:
+        return None
+    for p in paths:
+        if base3mf_object_names(p) & wanted:
+            return p
+    return None
+
+
 def base3mf_other_labels(paths):
     """
     Textes affichés pour des 3MF d'autres dossiers : « nom — dossier (date) ».
@@ -912,7 +951,7 @@ def base3mf_other_labels(paths):
 
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
 def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref,
-                     default_fc_3mf, recent_base3mf=()):
+                     default_fc_3mf, recent_base3mf=(), selected_names=()):
     """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
     dialog = QtGui.QDialog()
     dialog.setWindowTitle(tr("options_title"))
@@ -983,7 +1022,8 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     combo_base3mf.setToolTip(tr("hint_base3mf"))
     combo_base3mf.setMinimumWidth(420)
     combo_base3mf.addItem(tr("base3mf_none"), "")
-    for path, label in list_base3mf_choices(default_fc_3mf, recent_base3mf):
+    base_choices = list_base3mf_choices(default_fc_3mf, recent_base3mf)
+    for path, label in base_choices:
         combo_base3mf.addItem(label, path)
         combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
 
@@ -995,9 +1035,20 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         combo_base3mf.view().setMinimumWidth(width)
 
     widen_base3mf_popup()
-    # Par défaut : le 3MF de cette sélection s'il existe, sinon « Sans base »
+    # Par défaut : le 3MF de cette sélection s'il existe ; sinon le 3MF le
+    # plus récent contenant un objet du même nom (objet sorti d'un 3MF de
+    # plusieurs objets, par exemple) ; sinon « Sans base »
     if os.path.exists(default_fc_3mf):
         combo_base3mf.setCurrentIndex(1)
+    else:
+        # Seulement dans le dossier du projet : un « Body » d'un autre projet
+        # ne doit pas être pris par défaut
+        project_dir = os.path.normcase(os.path.dirname(os.path.abspath(default_fc_3mf)))
+        local = [p for p, _ in base_choices
+                 if os.path.normcase(os.path.dirname(p)) == project_dir]
+        match = find_base3mf_with_names(local, selected_names)
+        if match:
+            combo_base3mf.setCurrentIndex(combo_base3mf.findData(match))
     h_base3mf.addWidget(combo_base3mf, stretch=1)
     btn_base3mf = QtGui.QPushButton(tr("browse"))
 
@@ -1151,7 +1202,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     else:
         return (None, None, None, None, None, None, None, None, [])
 
-def get_user_options(cfg, fc_3mf):
+def get_user_options(cfg, fc_3mf, names=()):
     """
     Affiche la boîte de dialogue utilisateur :
     - paramètres FreeCAD
@@ -1181,7 +1232,7 @@ def get_user_options(cfg, fc_3mf):
          linear_value, angular_value, reset_all,
          ignore_transform, extra_cmds) = ask_user_options(
             slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf,
-            cfg.get("recent_base3mf", [])
+            cfg.get("recent_base3mf", []), names
         )
 
         # Annulation
@@ -2791,7 +2842,7 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 2) Préférences utilisateur
     # ------------------------------------------------------------
-    opts = get_user_options(cfg, fc_3mf)
+    opts = get_user_options(cfg, fc_3mf, names)
     if opts is None:
         return
 

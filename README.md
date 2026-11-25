@@ -57,6 +57,10 @@ and objects are reused:
 - **No base (new 3MF)**: a new 3MF containing only the geometry. If the 3MF of
   the selection already exists, it is kept as a `.old` backup.
 - **This selection's 3MF**: the usual choice, selected by default when it exists.
+  When it does not exist yet, the most recent 3MF of the project folder that
+  contains an object with the same name is selected instead (for example the
+  3MF of several objects, when you export one of them alone), so its settings
+  are not lost.
 - The other 3MF files of the project folder, most recent first.
 - The last bases used in other folders (the last 8, remembered from one session
   to the next), shown with their folder and date; hover over a line to see its
