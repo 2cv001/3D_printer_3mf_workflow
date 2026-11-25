@@ -210,6 +210,14 @@ TRANSLATIONS = {
                            "FreeCAD restera bloqué pendant ce temps.\n\n"
                            "Continuer quand même ?",
         "btn_back_options": "Revenir aux options",
+        "copies_title": "Copies sur le plateau",
+        "copies_text": "Ces objets ont été copiés sur le plateau du slicer et leur géométrie a changé :\n\n"
+                       "{details}\n\n"
+                       "Garder les copies ? Chacune reçoit la nouvelle géométrie et garde sa place ; "
+                       "si la pièce a grossi, elles peuvent se chevaucher (« Arranger » dans le slicer).",
+        "copies_line": "• {name} : {n} exemplaires",
+        "btn_keep_copies": "Garder les copies",
+        "btn_remove_copies": "Supprimer les copies",
         "fineness_group": "Finesse du maillage",
         "export_time": "Temps export : ~{time}",
         "export_time_pending": "Temps export : …",
@@ -354,6 +362,14 @@ TRANSLATIONS = {
                            "FreeCAD will be frozen meanwhile.\n\n"
                            "Continue anyway?",
         "btn_back_options": "Back to options",
+        "copies_title": "Copies on the plate",
+        "copies_text": "These objects were copied on the slicer plate and their geometry has changed:\n\n"
+                       "{details}\n\n"
+                       "Keep the copies? Each one gets the new geometry and keeps its place; "
+                       "if the part got bigger, they may overlap (\"Arrange\" in the slicer).",
+        "copies_line": "• {name}: {n} instances",
+        "btn_keep_copies": "Keep the copies",
+        "btn_remove_copies": "Remove the copies",
         "fineness_group": "Mesh fineness",
         "export_time": "Export time: ~{time}",
         "export_time_pending": "Export time: …",
@@ -500,6 +516,14 @@ TRANSLATIONS = {
                            "FreeCAD ist währenddessen blockiert.\n\n"
                            "Trotzdem fortfahren?",
         "btn_back_options": "Zurück zu den Optionen",
+        "copies_title": "Kopien auf der Platte",
+        "copies_text": "Diese Objekte wurden auf der Slicer-Platte kopiert und ihre Geometrie hat sich geändert:\n\n"
+                       "{details}\n\n"
+                       "Kopien behalten? Jede erhält die neue Geometrie und behält ihren Platz; "
+                       "ist das Teil größer geworden, können sie sich überlappen („Anordnen“ im Slicer).",
+        "copies_line": "• {name}: {n} Exemplare",
+        "btn_keep_copies": "Kopien behalten",
+        "btn_remove_copies": "Kopien entfernen",
         "fineness_group": "Netzfeinheit",
         "export_time": "Exportzeit: ~{time}",
         "export_time_pending": "Exportzeit: …",
@@ -2532,6 +2556,19 @@ class SlicerObject:
         self.old_triangles = old_triangles      # [(v1, v2, v3)] du maillage
         self.first_range = first_range          # (premier, dernier) triangle de la
                                                 # pièce principale (famille QIDISlicer)
+        self.n_items = 1                        # <item> qui placent cet objet (instances
+                                                # QIDIStudio / Bambu : plusieurs <item>)
+        self.copies = []                        # objets séparés qui en sont des copies
+                                                # (SlicerObject) : même maillage ou même nom
+
+    @property
+    def copy_ids(self):
+        return [c.obj_id for c in self.copies]
+
+    @property
+    def n_instances(self):
+        """Nombre d'exemplaires sur le plateau (l'objet et ses copies)."""
+        return self.n_items + sum(c.n_items for c in self.copies)
 
 
 # ------------------------------------------------------------
@@ -2700,6 +2737,7 @@ def analyse_slicer_objects(entries):
                         except (TypeError, ValueError):
                             pass
 
+    item_ids = [_attr(it, "objectid") for (_, _, it) in _build_items(model)]
     texts = {MODEL_PATH: model}
     result, seen = [], set()
     for _, _, item in _build_items(model):
@@ -2741,7 +2779,40 @@ def analyse_slicer_objects(entries):
             max(n_comp, cfg_parts.get(oid, 1)),
             bool(_PAINT_RE.search(mesh_m.group(0))), old_vertices,
             old_triangles, first_volume.get(oid)))
-    return result
+    for so in result:
+        so.n_items = item_ids.count(so.obj_id)
+    return _group_copies(result)
+
+
+def _group_copies(objects):
+    """
+    Regroupe les copies faites dans le slicer sous l'objet d'origine :
+    - QIDIStudio / Bambu « Ajouter une instance » : plusieurs <item> du même
+      objet (n_items) ;
+    - QIDIStudio / Bambu, duplication : objets séparés de même nom qui
+      partagent le même maillage ;
+    - QIDISlicer / PrusaSlicer : objets sans nom ni réglages qui pointent
+      vers le maillage de l'objet d'origine.
+    Un objet qui partage le maillage d'un autre, ou porte le même nom, en est
+    une copie (les objets venant de FreeCAD ont des noms distincts et chacun
+    son maillage). L'objet d'origine est le premier objet nommé.
+    """
+    ordered = sorted(objects, key=lambda so: so.name is None)   # objets nommés d'abord
+    by_mesh, by_name, mains = {}, {}, []
+    for so in ordered:
+        key = (so.mesh_file, so.mesh_id)
+        main = by_mesh.get(key) or (by_name.get(so.name) if so.name else None)
+        if main is not None:
+            main.copies.append(so)
+            by_mesh.setdefault(key, main)
+            continue
+        by_mesh[key] = so
+        if so.name:
+            by_name[so.name] = so
+        mains.append(so)
+    # Ordre d'origine (ordre des <item>)
+    order = {id(so): i for i, so in enumerate(objects)}
+    return sorted(mains, key=lambda so: order[id(so)])
 
 
 def match_parts_to_objects(parts, slicer_objects):
@@ -2940,13 +3011,16 @@ def _new_uuid():
     return str(uuid.uuid4())
 
 
-def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchanged=()):
+def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchanged=(),
+                 keep_copies=False):
     """
     Construit le nouveau 3MF (en mémoire) à partir de celui du slicer :
     - objets associés : maillage remplacé, réglages et position conservés
       (rotation et XY, sauf si ignore_transform), copies supprimées ;
     - objets associés dont la géométrie n'a pas changé (`unchanged`) :
       laissés tels quels (seul leur nom peut être mis à jour) ;
+    - avec `keep_copies` (et sans ignore_transform) : les copies d'un objet
+      modifié sont gardées, chacune à sa place, avec la nouvelle géométrie ;
     - objets du slicer sans équivalent dans la sélection : supprimés ;
     - objets FreeCAD nouveaux : ajoutés.
     """
@@ -3045,27 +3119,94 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchan
             model = model[:start] + block + model[end:]
             texts[MODEL_PATH] = model
 
-        # Position : premier <item> gardé, copies supprimées
-        items = [(s, e, it) for (s, e, it) in _build_items(model) if _attr(it, "objectid") == so.obj_id]
-        s, e, it = items[0]
-        if ignore_transform:
-            new_t = _layout_transform(part, local, so.component_transform, layout)
-        else:
-            new_t = _keep_transform(_attr(it, "transform"), local, so.component_transform)
-        new_t = " ".join(new_t)
-        model = model[:s] + _set_attr(it, "transform", new_t) + model[e:]
-        seen_first = [False]
+        keep = keep_copies and not ignore_transform and so.n_instances > 1
+        if keep:
+            # Copies gardées : chaque <item> de l'objet et de ses copies garde
+            # sa position et sa rotation, et est reposé sur le plateau
+            # Copie qui a son propre maillage : il reçoit aussi la nouvelle géométrie
+            for c in so.copies:
+                if (c.mesh_file, c.mesh_id) in used_meshes or c.mesh_file not in entries and c.mesh_file not in texts:
+                    continue
+                c_old = _bbox_center(c.old_vertices)
+                c_local = [(x - part.center[0] + c_old[0], y - part.center[1] + c_old[1],
+                            z - part.center[2] + c_old[2]) for (x, y, z) in part.vertices]
+                t = text(c.mesh_file)
+                span = _find_block(t, _OBJECT_RE, "id", c.mesh_id)
+                if span:
+                    blk = _MESH_RE.sub(lambda m: _mesh_xml(c_local, part.triangles), t[span[0]:span[1]], count=1)
+                    texts[c.mesh_file] = t[:span[0]] + blk + t[span[1]:]
+                used_meshes.add((c.mesh_file, c.mesh_id))
+            model = text(MODEL_PATH)
+            comp_of = {so.obj_id: so.component_transform}
+            comp_of.update({c.obj_id: c.component_transform for c in so.copies})
+            transforms = {}                     # id d'objet → transforms de ses <item>
 
-        def keep_item(b, oid=so.obj_id):
-            if _attr(b, "objectid") != oid:
-                return True
-            if not seen_first[0]:
-                seen_first[0] = True
-                return True
-            return False
-        b = _BUILD_RE.search(model)
-        model = model[:b.start()] + _remove_blocks(b.group(0), _ITEM_RE, keep_item) + model[b.end():]
-        texts[MODEL_PATH] = model
+            def place(m):
+                it = m.group(0)
+                oid = _attr(it, "objectid")
+                if oid not in comp_of:
+                    return it
+                t = " ".join(_keep_transform(_attr(it, "transform"), local, comp_of[oid]))
+                transforms.setdefault(oid, []).append(t)
+                return _set_attr(it, "transform", t)
+            b = _BUILD_RE.search(model)
+            model = model[:b.start()] + _ITEM_RE.sub(place, b.group(0)) + model[b.end():]
+            item_transforms = transforms[so.obj_id]
+            new_t = item_transforms[0]
+            texts[MODEL_PATH] = model
+        else:
+            # Position : premier <item> gardé, copies supprimées
+            items = [(s, e, it) for (s, e, it) in _build_items(model) if _attr(it, "objectid") == so.obj_id]
+            s, e, it = items[0]
+            if ignore_transform:
+                new_t = _layout_transform(part, local, so.component_transform, layout)
+            else:
+                new_t = _keep_transform(_attr(it, "transform"), local, so.component_transform)
+            new_t = " ".join(new_t)
+            item_transforms = [new_t]
+            model = model[:s] + _set_attr(it, "transform", new_t) + model[e:]
+            seen_first = [False]
+            copies = set(so.copy_ids)
+
+            def keep_item(b, oid=so.obj_id):
+                if _attr(b, "objectid") in copies:
+                    return False
+                if _attr(b, "objectid") != oid:
+                    return True
+                if not seen_first[0]:
+                    seen_first[0] = True
+                    return True
+                return False
+            b = _BUILD_RE.search(model)
+            model = model[:b.start()] + _remove_blocks(b.group(0), _ITEM_RE, keep_item) + model[b.end():]
+            if copies:
+                # Maillage propre d'une copie (pas partagé avec l'objet gardé)
+                own = {(c.mesh_file, c.mesh_id) for c in so.copies} - {(so.mesh_file, so.mesh_id)}
+                inline = {mid for (f, mid) in own if f == MODEL_PATH}
+                model = _remove_blocks(model, _OBJECT_RE,
+                                       lambda blk: _attr(_start_tag(blk), "id") not in (copies | inline))
+                files = {f for (f, _) in own if f != MODEL_PATH} - {so.mesh_file}
+                for f in files:
+                    texts[f] = None
+                rels = text(MODEL_RELS)
+                if rels is not None and files:
+                    texts[MODEL_RELS] = _remove_blocks(
+                        rels, re.compile(r'<Relationship\b[^>]*/>'),
+                        lambda r: (_attr(r, "Target") or "").lstrip("/") not in files)
+                for cfg_name in (PRUSA_CONFIG, BAMBU_CONFIG):
+                    cfg_txt = text(cfg_name)
+                    if cfg_txt is None:
+                        continue
+                    cfg_txt = _remove_blocks(cfg_txt, _OBJECT_RE,
+                                             lambda blk: _attr(_start_tag(blk), "id") not in copies)
+                    if cfg_name == BAMBU_CONFIG:
+                        cfg_txt = _remove_blocks(cfg_txt, _PLATE_INSTANCE_RE,
+                                                 lambda blk: _meta_value(blk, "object_id") not in copies)
+                        cfg_txt = _remove_blocks(cfg_txt, _ASSEMBLE_ITEM_RE,
+                                                 lambda blk: _attr(blk, "object_id") not in copies)
+                    texts[cfg_name] = cfg_txt
+            texts[MODEL_PATH] = model
+            transforms = {so.obj_id: item_transforms}
 
         # Configuration famille QIDISlicer / PrusaSlicer
         cfg = text(PRUSA_CONFIG)
@@ -3073,7 +3214,8 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchan
             span = _find_block(cfg, _OBJECT_RE, "id", so.obj_id)
             if span:
                 block = cfg[span[0]:span[1]]
-                block = _set_attr(block, "instances_count", "1")
+                if not keep:
+                    block = _set_attr(block, "instances_count", "1")
                 first = [True]
 
                 def keep_first_volume(_b):
@@ -3098,16 +3240,35 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchan
                 block = re.sub(r'(<metadata face_count=")\d+(")', rf'\g<1>{n_tri}\g<2>', block)
                 block = re.sub(r'(<mesh_stat face_count=")\d+(")', rf'\g<1>{n_tri}\g<2>', block)
                 cfg = cfg[:span[0]] + block + cfg[span[1]:]
-            # Copies supprimées, position de l'assemblage synchronisée
-            cfg = _remove_blocks(cfg, _PLATE_INSTANCE_RE,
-                                 lambda b: not (_meta_value(b, "object_id") == so.obj_id
-                                                and _meta_value(b, "instance_id") not in (None, "0")))
-            cfg = _remove_blocks(cfg, _ASSEMBLE_ITEM_RE,
-                                 lambda b: not (_attr(b, "object_id") == so.obj_id
-                                                and _attr(b, "instance_id") not in (None, "0")))
-            cfg = _ASSEMBLE_ITEM_RE.sub(
-                lambda m: _set_attr(m.group(0), "transform", new_t)
-                if _attr(m.group(0), "object_id") == so.obj_id else m.group(0), cfg)
+            if not keep:
+                # Copies supprimées
+                cfg = _remove_blocks(cfg, _PLATE_INSTANCE_RE,
+                                     lambda b: not (_meta_value(b, "object_id") == so.obj_id
+                                                    and _meta_value(b, "instance_id") not in (None, "0")))
+                cfg = _remove_blocks(cfg, _ASSEMBLE_ITEM_RE,
+                                     lambda b: not (_attr(b, "object_id") == so.obj_id
+                                                    and _attr(b, "instance_id") not in (None, "0")))
+
+            # Copies gardées : nombre de faces à jour
+            for cid in (so.copy_ids if keep else []):
+                span = _find_block(cfg, _OBJECT_RE, "id", cid)
+                if span:
+                    block = cfg[span[0]:span[1]]
+                    block = re.sub(r'(<metadata face_count=")\d+(")', rf'\g<1>{n_tri}\g<2>', block)
+                    block = re.sub(r'(<mesh_stat face_count=")\d+(")', rf'\g<1>{n_tri}\g<2>', block)
+                    cfg = cfg[:span[0]] + block + cfg[span[1]:]
+
+            # Position de l'assemblage synchronisée avec chaque exemplaire
+            def sync(m):
+                ts = transforms.get(_attr(m.group(0), "object_id"))
+                if not ts:
+                    return m.group(0)
+                try:
+                    k = int(_attr(m.group(0), "instance_id") or 0)
+                except ValueError:
+                    k = 0
+                return _set_attr(m.group(0), "transform", ts[k] if k < len(ts) else ts[0])
+            cfg = _ASSEMBLE_ITEM_RE.sub(sync, cfg)
             texts[BAMBU_CONFIG] = cfg
 
         # Objet repris sous un autre nom (1 seul objet sélectionné, aucun nom
@@ -3118,10 +3279,13 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchan
 
     # ---- 2) Objets du slicer qui ne sont plus dans la sélection ----
     removed = [so for so in slicer_objects if so.obj_id not in matched_ids]
-    removed_ids = {so.obj_id for so in removed}
+    removed_ids = {so.obj_id for so in removed} | {c for so in removed for c in so.copy_ids}
     if removed:
         model = text(MODEL_PATH)
-        orphan_meshes = {so.mesh_id for so in removed if so.mesh_file == MODEL_PATH}
+        kept_all = [o for so in slicer_objects if so.obj_id in matched_ids for o in [so] + so.copies]
+        removed_all = [o for so in removed for o in [so] + so.copies]
+        still_used_meshes = {o.mesh_id for o in kept_all if o.mesh_file == MODEL_PATH}
+        orphan_meshes = {o.mesh_id for o in removed_all if o.mesh_file == MODEL_PATH} - still_used_meshes
         model = _remove_blocks(model, _OBJECT_RE,
                                lambda b: _attr(_start_tag(b), "id") not in (removed_ids | orphan_meshes))
         b = _BUILD_RE.search(model)
@@ -3130,8 +3294,8 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchan
         texts[MODEL_PATH] = model
 
         # Fichiers de maillage qui ne servent plus
-        still_used = {so.mesh_file for so in slicer_objects if so.obj_id in matched_ids}
-        dead_files = {so.mesh_file for so in removed if so.mesh_file != MODEL_PATH} - still_used
+        still_used = {o.mesh_file for o in kept_all}
+        dead_files = {o.mesh_file for o in removed_all if o.mesh_file != MODEL_PATH} - still_used
         for f in dead_files:
             texts[f] = None
         rels = text(MODEL_RELS)
@@ -3601,6 +3765,47 @@ def handle_empty_plate(fc_3mf_existed_at_start, old_3mf_backup, fc_3mf):
         if DEBUG: print("ℹ️ Annulé par l’utilisateur.")
         return "stop"
 
+def describe_copies(parts, pairs, unchanged, ignore_transform):
+    """
+    Objets modifiés qui ont des copies sur le plateau : [(nom, exemplaires)].
+    Les objets inchangés gardent toujours leurs copies ; avec « Ne pas récupérer
+    la position/rotation du slicer », les objets sont replacés selon FreeCAD
+    et les copies supprimées, sans question.
+    """
+    if ignore_transform:
+        return []
+    return [(so.name or parts[i].name, so.n_instances)
+            for i, so in sorted(pairs.items()) if i not in unchanged and so.n_instances > 1]
+
+
+def ask_copies_dialog(copies, losses=()):
+    """
+    Demande s'il faut garder les copies des objets modifiés (et prévient des
+    pertes éventuelles dans la même fenêtre).
+    Retourne "keep", "remove" ou "cancel".
+    """
+    details = "\n".join(tr("copies_line").format(name=name, n=n) for name, n in copies)
+    text = tr("copies_text").format(details=details)
+    if losses:
+        text += "\n\n" + tr("warn_losses").format(
+            details="\n".join(f"• {name} : {reason}" for name, reason in losses))
+    box = QtGui.QMessageBox()
+    box.setIcon(QtGui.QMessageBox.Question)
+    box.setWindowTitle(tr("copies_title"))
+    box.setText(text)
+    btn_keep = box.addButton(tr("btn_keep_copies"), QtGui.QMessageBox.AcceptRole)
+    btn_remove = box.addButton(tr("btn_remove_copies"), QtGui.QMessageBox.DestructiveRole)
+    box.addButton(tr("btn_cancel"), QtGui.QMessageBox.RejectRole)
+    box.setDefaultButton(btn_keep)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked == btn_keep:
+        return "keep"
+    if clicked == btn_remove:
+        return "remove"
+    return "cancel"
+
+
 def ask_losses_dialog(losses):
     """
     Prévient que des données du slicer seront perdues (peinture, modificateurs).
@@ -3691,13 +3896,21 @@ def inject_geometry_if_possible(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start,
     if DEBUG and unchanged:
         print("  Inchangés (laissés tels quels) :", ", ".join(parts[i].name for i in sorted(unchanged)))
     losses = describe_losses(parts, slicer_objects, pairs, unchanged)
-    if losses and not ask_losses_dialog(losses):
+    copies = describe_copies(parts, pairs, unchanged, ignore_transform)
+    keep_copies = False
+    if copies:
+        choice = ask_copies_dialog(copies, losses)
+        if choice == "cancel":
+            return "cancel", None
+        keep_copies = choice == "keep"
+    elif losses and not ask_losses_dialog(losses):
         return "cancel", None
 
     # ------------------------------------------------------------
     # 5) Construction du 3MF final (en mémoire)
     # ------------------------------------------------------------
-    entries = inject_parts(source_entries, parts, slicer_objects, pairs, ignore_transform, unchanged)
+    entries = inject_parts(source_entries, parts, slicer_objects, pairs, ignore_transform, unchanged,
+                           keep_copies)
     if DEBUG: print("✅ Injection faite pour :", os.path.basename(fc_3mf))
     return "ok", entries
 

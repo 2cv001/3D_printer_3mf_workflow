@@ -46,9 +46,12 @@ the document and the 3D view are not touched.
   rotation on the plate are kept, and it is put back on the plate.
 - Objects that are no longer selected are removed from the 3MF; newly selected
   objects are added at their FreeCAD position.
-- Copies made on the plate in the slicer are removed: once the object has
-  changed, they may no longer fit (objects too close to each other, for
-  example). Make the copies again in the slicer.
+- Copies made on the plate in the slicer (duplicated objects or added
+  instances) are kept as long as the object has not changed in FreeCAD. When it
+  has changed, the macro asks: **Keep the copies** (each one gets the new
+  geometry and keeps its place; if the part got bigger they may overlap, use
+  "Arrange" in the slicer) or **Remove the copies**. With **Do not recover
+  slicer position/rotation** checked, the copies are removed.
 - With a single selected object and a 3MF whose object has another name, the
   first object on the plate is replaced and renamed after the FreeCAD object,
   so 3MF files made by previous versions keep working.
