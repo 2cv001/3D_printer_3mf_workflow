@@ -203,7 +203,6 @@ TRANSLATIONS = {
         "base3mf_info_nomatch": "Aucun objet de {base} ne porte le nom d'un objet sélectionné : "
                                 "tous les objets auront les réglages généraux de {base}.",
         "base3mf_info_nosettings": "Ce 3MF ne contient pas de réglages de slicer : géométrie seule.",
-        "base3mf_info_unchanged": "{base} n'est pas modifié.",
         "base3mf_info_more": "{names} et {n} autres",
 
         # Messages d'erreur / avertissement
@@ -322,7 +321,6 @@ TRANSLATIONS = {
         "base3mf_info_nomatch": "No object of {base} has the name of a selected object: "
                                 "all objects will get the general settings of {base}.",
         "base3mf_info_nosettings": "This 3MF contains no slicer settings: geometry only.",
-        "base3mf_info_unchanged": "{base} is not modified.",
         "base3mf_info_more": "{names} and {n} more",
 
         # Error / warning messages
@@ -443,7 +441,6 @@ TRANSLATIONS = {
         "base3mf_info_nomatch": "Kein Objekt von {base} trägt den Namen eines ausgewählten Objekts: "
                                 "alle Objekte erhalten die allgemeinen Einstellungen von {base}.",
         "base3mf_info_nosettings": "Diese 3MF enthält keine Slicer-Einstellungen: nur Geometrie.",
-        "base3mf_info_unchanged": "{base} wird nicht verändert.",
         "base3mf_info_more": "{names} und {n} weitere",
 
         # Error / warning messages
@@ -971,11 +968,10 @@ def describe_base3mf(base_path, fc_3mf, selected_names):
     base = os.path.basename(base_path)
     is_current = (os.path.normcase(os.path.abspath(base_path))
                   == os.path.normcase(os.path.abspath(fc_3mf)))
-    unchanged = [] if is_current else [tr("base3mf_info_unchanged").format(base=base)]
     has_settings, base_names = base3mf_objects(base_path)
 
     if not has_settings:
-        return "\n".join([tr("base3mf_info_nosettings")] + unchanged), False, ""
+        return tr("base3mf_info_nosettings"), False, ""
 
     kept = [n for n in selected if n in base_names]
     new = [n for n in selected if n not in base_names]
@@ -984,13 +980,13 @@ def describe_base3mf(base_path, fc_3mf, selected_names):
     if not kept:
         if len(selected) == 1 and base_names:
             line = tr("base3mf_info_renamed").format(old=base_names[0], base=base, name=selected[0])
-            return "\n".join([line] + unchanged), False, ""
+            return line, False, ""
         line = tr("base3mf_info_nomatch").format(base=base)
-        return "\n".join([line] + unchanged), True, ""
+        return line, True, ""
 
     if len(selected) == 1 and not (is_current and removed):
         line = tr("base3mf_info_kept_one").format(base=base, names=kept[0])
-        return "\n".join([line] + unchanged), False, ""
+        return line, False, ""
 
     lines, tips = [], []
 
@@ -1005,7 +1001,7 @@ def describe_base3mf(base_path, fc_3mf, selected_names):
     # objets en trop dans le 3MF de la sélection sont signalés
     if removed and is_current:
         add("base3mf_info_removed", removed)
-    return "\n".join(lines + unchanged), False, "\n".join(tips)
+    return "\n".join(lines), False, "\n".join(tips)
 
 
 def find_base3mf_with_names(paths, selected_names):
