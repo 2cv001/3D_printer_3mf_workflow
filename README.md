@@ -92,6 +92,15 @@ it changes. If some would be lost, the macro tells you which objects are
 concerned and asks you to **Continue** or **Cancel** (the 3MF is then left
 unchanged).
 
+Objects whose geometry has not changed in FreeCAD since the last export are
+left exactly as they are in the slicer: their settings applied to faces,
+modifiers, copies and position are all kept, and the warning only lists the
+objects that really changed. For example, with `Housing_Lid.3mf`, modifying only
+the Housing keeps the enforced supports of the Lid. (Changing the precision or
+the angular tolerance changes the mesh, so all objects are then replaced. With
+**Do not recover slicer position/rotation** checked, all objects are replaced
+and placed as in FreeCAD.)
+
 ## Export filenames
 
 The 3MF is named after the selected objects' visible names (their **Label** in

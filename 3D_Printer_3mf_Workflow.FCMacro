@@ -1786,6 +1786,7 @@ _COMPONENT_RE = re.compile(r'<component\b[^>]*?/>|<component\b[^>]*>.*?</compone
 _VERTEX_RE = re.compile(r'<vertex\b[^>]*?\sx="([^"]+)"[^>]*?\sy="([^"]+)"[^>]*?\sz="([^"]+)"')
 # Attribut d'un triangle autre que v1/v2/v3 : peinture (supports, couture,
 # couleurs) ou matériau par face
+_TRIANGLE_RE = re.compile(r'<triangle\b[^>]*?\sv1="(\d+)"[^>]*?\sv2="(\d+)"[^>]*?\sv3="(\d+)"')
 _PAINT_RE = re.compile(r'<triangle\b[^>]*?\s(?!v[123]=)[A-Za-z_][\w:.-]*="')
 _NAME_META_RE = re.compile(r'<metadata\b[^>]*\skey="name"[^>]*\svalue="([^"]*)"')
 _VOLUME_RE = re.compile(r'<volume\b[^>]*?(?:/>|>.*?</volume>)', re.S)
@@ -1808,7 +1809,7 @@ class SlicerObject:
     """Un objet trouvé dans le 3MF du slicer."""
 
     def __init__(self, obj_id, name, mesh_file, mesh_id, component_transform,
-                 n_parts, painted, old_vertices):
+                 n_parts, painted, old_vertices, old_triangles=None, first_range=None):
         self.obj_id = obj_id                    # id de l'objet placé par le <item>
         self.name = name
         self.mesh_file = mesh_file              # fichier qui contient le maillage
@@ -1817,6 +1818,9 @@ class SlicerObject:
         self.n_parts = n_parts                  # >1 : modificateurs / pièces multiples
         self.painted = painted
         self.old_vertices = old_vertices
+        self.old_triangles = old_triangles      # [(v1, v2, v3)] du maillage
+        self.first_range = first_range          # (premier, dernier) triangle de la
+                                                # pièce principale (famille QIDISlicer)
 
 
 # ------------------------------------------------------------
@@ -1964,7 +1968,7 @@ def analyse_slicer_objects(entries):
         objects.setdefault(_attr(_start_tag(m.group(0)), "id"), m.group(0))
 
     # Noms et nombre de pièces donnés par les fichiers de configuration
-    names, cfg_parts = {}, {}
+    names, cfg_parts, first_volume = {}, {}, {}
     for cfg, part_re in ((BAMBU_CONFIG, _PART_RE), (PRUSA_CONFIG, _VOLUME_RE)):
         if cfg in entries:
             txt = entries[cfg].decode("utf-8", errors="replace")
@@ -1974,6 +1978,16 @@ def analyse_slicer_objects(entries):
                 if n:
                     names.setdefault(oid, _xml_unescape(n.group(1)))
                 cfg_parts[oid] = max(cfg_parts.get(oid, 0), len(part_re.findall(m.group(0))))
+                if cfg == PRUSA_CONFIG:
+                    # Famille QIDISlicer : toutes les pièces sont dans un seul
+                    # maillage ; la première occupe les triangles firstid..lastid
+                    v = _VOLUME_RE.search(m.group(0))
+                    if v:
+                        try:
+                            first_volume[oid] = (int(_attr(v.group(0), "firstid")),
+                                                 int(_attr(v.group(0), "lastid")))
+                        except (TypeError, ValueError):
+                            pass
 
     texts = {MODEL_PATH: model}
     result, seen = [], set()
@@ -2008,11 +2022,14 @@ def analyse_slicer_objects(entries):
                         for x, y, z in _VERTEX_RE.findall(mesh_m.group(0))]
         if not old_vertices:
             continue
+        old_triangles = [(int(a), int(b), int(c))
+                         for a, b, c in _TRIANGLE_RE.findall(mesh_m.group(0))]
         name = names.get(oid) or _attr(_start_tag(block), "name")
         result.append(SlicerObject(
             oid, _xml_unescape(name) if name else None, mesh_file, mesh_id, comp,
             max(n_comp, cfg_parts.get(oid, 1)),
-            bool(_PAINT_RE.search(mesh_m.group(0))), old_vertices))
+            bool(_PAINT_RE.search(mesh_m.group(0))), old_vertices,
+            old_triangles, first_volume.get(oid)))
     return result
 
 
@@ -2035,10 +2052,97 @@ def match_parts_to_objects(parts, slicer_objects):
     return pairs
 
 
-def describe_losses(parts, slicer_objects, pairs):
+UNCHANGED_TOLERANCE = 0.001  # mm
+
+
+def mesh_unchanged(part, so, tol=UNCHANGED_TOLERANCE):
+    """
+    Vrai si le maillage FreeCAD de `part` est le même que celui de l'objet du
+    slicer `so` (à une translation près : le slicer recentre les maillages).
+    Même nombre de triangles et mêmes sommets à `tol` près. Dans le doute,
+    retourne False : l'objet est alors remplacé, comme avant.
+    """
+    old_tris = so.old_triangles
+    if not old_tris or not part.triangles:
+        return False
+    if so.first_range:
+        a, b = so.first_range
+        old_tris = old_tris[a:b + 1]
+    if len(old_tris) != len(part.triangles):
+        return False
+
+    def used_points(vertices, triangles):
+        n = len(vertices)
+        idx = {i for t in triangles for i in t}
+        if any(i >= n for i in idx):
+            return None
+        return list({vertices[i] for i in idx})
+
+    old_pts = used_points(so.old_vertices, old_tris)
+    new_pts = used_points(part.vertices, part.triangles)
+    if not old_pts or not new_pts or len(old_pts) != len(new_pts):
+        return False
+
+    (ox0, oy0, oz0), (ox1, oy1, oz1) = _bbox(old_pts)
+    (nx0, ny0, nz0), (nx1, ny1, nz1) = _bbox(new_pts)
+    if (abs((ox1 - ox0) - (nx1 - nx0)) > tol or abs((oy1 - oy0) - (ny1 - ny0)) > tol
+            or abs((oz1 - oz0) - (nz1 - nz0)) > tol):
+        return False
+    oc = ((ox0 + ox1) / 2, (oy0 + oy1) / 2, (oz0 + oz1) / 2)
+    nc = ((nx0 + nx1) / 2, (ny0 + ny1) / 2, (nz0 + nz1) / 2)
+
+    # Grille des anciens sommets (recentrés), pour une recherche rapide
+    cell = tol * 4
+    grid = {}
+    for x, y, z in old_pts:
+        x, y, z = x - oc[0], y - oc[1], z - oc[2]
+        grid.setdefault((int(x // cell), int(y // cell), int(z // cell)), []).append((x, y, z))
+    for x, y, z in new_pts:
+        x, y, z = x - nc[0], y - nc[1], z - nc[2]
+        kx, ky, kz = int(x // cell), int(y // cell), int(z // cell)
+        found = False
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for (px, py, pz) in grid.get((kx + dx, ky + dy, kz + dz), ()):
+                        if abs(px - x) <= tol and abs(py - y) <= tol and abs(pz - z) <= tol:
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    break
+        if not found:
+            return False
+    return True
+
+
+def find_unchanged(parts, pairs, ignore_transform):
+    """
+    Index des objets FreeCAD dont la géométrie n'a pas changé depuis le
+    dernier export : leur objet du slicer est laissé tel quel (réglages
+    appliqués sur les faces, modificateurs, copies et position gardés).
+    Avec « Ne pas récupérer la position/rotation du slicer », tous les objets
+    sont replacés selon FreeCAD : aucun n'est laissé tel quel.
+    """
+    if ignore_transform:
+        return set()
+    unchanged = set()
+    for i, so in pairs.items():
+        try:
+            if mesh_unchanged(parts[i], so):
+                unchanged.add(i)
+        except Exception as e:
+            if DEBUG: print("⚠️ Comparaison des maillages impossible :", e)
+    return unchanged
+
+
+def describe_losses(parts, slicer_objects, pairs, unchanged=()):
     """Ce qui sera perdu en remplaçant les maillages : liste de (nom, raison)."""
     losses = []
     for i, so in pairs.items():
+        if i in unchanged:
+            continue
         name = so.name or parts[i].name
         if so.painted:
             losses.append((name, tr("loss_paint")))
@@ -2125,11 +2229,13 @@ def _new_uuid():
     return str(uuid.uuid4())
 
 
-def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform):
+def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform, unchanged=()):
     """
     Construit le nouveau 3MF (en mémoire) à partir de celui du slicer :
     - objets associés : maillage remplacé, réglages et position conservés
       (rotation et XY, sauf si ignore_transform), copies supprimées ;
+    - objets associés dont la géométrie n'a pas changé (`unchanged`) :
+      laissés tels quels (seul leur nom peut être mis à jour) ;
     - objets du slicer sans équivalent dans la sélection : supprimés ;
     - objets FreeCAD nouveaux : ajoutés.
     """
@@ -2151,8 +2257,15 @@ def inject_parts(entries, parts, slicer_objects, pairs, ignore_transform):
 
     # ---- 1) Objets associés ----
     used_meshes = set()
-    for i, so in pairs.items():
+    # Les objets inchangés d'abord : si l'un d'eux partage son maillage avec
+    # un objet modifié, ce dernier reçoit alors son propre maillage
+    for i, so in sorted(pairs.items(), key=lambda kv: kv[0] not in unchanged):
         part = parts[i]
+        if i in unchanged:
+            used_meshes.add((so.mesh_file, so.mesh_id))
+            if so.name != part.name:
+                _rename_object(text, texts, so.obj_id, part.name, so.name)
+            continue
         old_c = _bbox_center(so.old_vertices)
         dz = old_c[2] - part.center[2]
         item = next(it for (_, _, it) in _build_items(text(MODEL_PATH))
@@ -2863,14 +2976,17 @@ def inject_geometry_if_possible(fc_3mf, old_3mf_backup, fc_3mf_existed_at_start,
     # ------------------------------------------------------------
     # 4) Ce qui sera perdu : on demande avant de toucher à quoi que ce soit
     # ------------------------------------------------------------
-    losses = describe_losses(parts, slicer_objects, pairs)
+    unchanged = find_unchanged(parts, pairs, ignore_transform)
+    if DEBUG and unchanged:
+        print("  Inchangés (laissés tels quels) :", ", ".join(parts[i].name for i in sorted(unchanged)))
+    losses = describe_losses(parts, slicer_objects, pairs, unchanged)
     if losses and not ask_losses_dialog(losses):
         return "cancel", None
 
     # ------------------------------------------------------------
     # 5) Construction du 3MF final (en mémoire)
     # ------------------------------------------------------------
-    entries = inject_parts(source_entries, parts, slicer_objects, pairs, ignore_transform)
+    entries = inject_parts(source_entries, parts, slicer_objects, pairs, ignore_transform, unchanged)
     if DEBUG: print("✅ Injection faite pour :", os.path.basename(fc_3mf))
     return "ok", entries
 
