@@ -20,6 +20,12 @@ ns = {"__file__": MACRO, "__name__": "macro_under_test"}
 exec(compile(src, MACRO, "exec"), ns)
 ns["DEBUG"] = True
 
+
+def estimate(selection, d, a):
+    model = ns["build_mesh_cost_model"](selection, d, a)
+    return model.estimate(d, a) if model else (0, 0)
+
+
 real = {}
 txt = open(os.path.join(FIX, "mesh_scaling_ref.txt"), encoding="utf-8").read()
 cur = None
@@ -45,7 +51,7 @@ for (name, d, ang), (n_real, t_real) in sorted(real.items()):
     if name not in objs:
         continue
     t0 = time.perf_counter()
-    n_est, t_est = ns["estimate_mesh_cost"]([objs[name]], d, math.radians(ang))
+    n_est, t_est = estimate([objs[name]], d, math.radians(ang))
     dt = time.perf_counter() - t0
     warn = n_est > ns["HEAVY_MESH_TRIANGLES"] or t_est > ns["HEAVY_MESH_SECONDS"]
     log(f"{name:11} d={d:<6} {ang}°  réel {n_real:>7} {t_real:6.1f}s | estim {n_est:>7} {t_est:6.1f}s "
@@ -55,6 +61,6 @@ for (name, d, ang), (n_real, t_real) in sorted(real.items()):
 # Cas extrêmes : l'estimation doit rester rapide
 for name, d, ang in (("sphere50", 0.0001, 3), ("torus40_10", 0.01, 0.1), ("sphere50", 0.001, 0.2)):
     t0 = time.perf_counter()
-    n_est, t_est = ns["estimate_mesh_cost"]([objs[name]], d, math.radians(ang))
+    n_est, t_est = estimate([objs[name]], d, math.radians(ang))
     log(f"EXTRÊME {name} d={d} {ang}° : estim {n_est} tri {t_est:.0f}s, estimation en {time.perf_counter() - t0:.2f}s")
 log("FIN")

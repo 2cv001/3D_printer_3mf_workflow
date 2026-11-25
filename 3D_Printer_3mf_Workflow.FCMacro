@@ -41,15 +41,12 @@ __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
 __Github__ = "https://github.com/2cv001/3D_printer_3mf_workflow"
 __License__ = "Apache-2.0"
 
-import math, os, zipfile, shutil, subprocess, re, fnmatch, xml.etree.ElementTree as ET
+import math, os, zipfile, shutil, subprocess, re, xml.etree.ElementTree as ET
 import configparser, ast, platform, time, shlex, sys
 import FreeCAD, FreeCADGui, Mesh, MeshPart
 from PySide import QtGui, QtCore
 from typing import Dict, Optional
-import gc
-import tempfile
 import urllib.request
-import shutil
 
 
 
@@ -60,7 +57,7 @@ import shutil
 INI_FILE = os.path.join(os.path.dirname(__file__), "3D_Printer_3mf_Workflow.ini")
 PLATEAU_X, PLATEAU_Y, PLATEAU_Z = 240, 240, 0
 
-MAX_OLD_BACKUPS = 2 # nb de sauvegarde
+MAX_OLD_BACKUPS = 3 # nb de sauvegardes datées (.old.date.3mf) gardées
 
 DEBUG = False
 DEBUGPIPE = False
@@ -2304,14 +2301,6 @@ def build_mesh_cost_model(selection, linear_deflection, angular_deflection):
     return MeshCostModel(laws, get_mesh_time_factor())
 
 
-def estimate_mesh_cost(selection, linear_deflection, angular_deflection):
-    """(triangles, secondes) estimés ; (0, 0) si l'estimation échoue."""
-    model = build_mesh_cost_model(selection, linear_deflection, angular_deflection)
-    if model is None:
-        return 0, 0
-    return model.estimate(linear_deflection, angular_deflection)
-
-
 def get_mesh_time_factor():
     """Recalage du temps estimé, appris sur cette machine (fichier ini)."""
     try:
@@ -4143,54 +4132,3 @@ def run_macro():
 
 
 run_macro()
-
-
-
-
-if False:
-
-    import traceback
-    import inspect
-    import ast
-
-    def _debug_list_functions():
-        print("\n=== LISTE DES FONCTIONS DANS LA MACRO ===")
-        for name, obj in globals().items():
-            if inspect.isfunction(obj):
-                print(name)
-        print("=== FIN DE LISTE ===\n")
-
-    _debug_list_functions()
-
-
-
-    def _debug_find_unused_functions(path):
-        with open(path, "r", encoding="utf-8") as f:
-            tree = ast.parse(f.read())
-
-        # 1) Récupérer toutes les fonctions définies dans le fichier
-        defined_funcs = set()
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
-                defined_funcs.add(node.name)
-
-        # 2) Récupérer tous les appels de fonctions dans le fichier
-        called_funcs = set()
-        class CallVisitor(ast.NodeVisitor):
-            def visit_Call(self, node):
-                if isinstance(node.func, ast.Name):
-                    called_funcs.add(node.func.id)
-                self.generic_visit(node)
-
-        CallVisitor().visit(tree)
-
-        # 3) Fonctions définies mais jamais appelées
-        unused = sorted(defined_funcs - called_funcs)
-
-        print("\n=== FONCTIONS DÉFINIES MAIS JAMAIS APPELÉES ===")
-        for name in unused:
-            print("  -", name)
-        print("=== FIN ===\n")
-
-    # Lancer l’analyse
-    _debug_find_unused_functions(__file__)#!/usr/bin/env python
