@@ -2793,15 +2793,17 @@ def _group_copies(objects):
       partagent le même maillage ;
     - QIDISlicer / PrusaSlicer : objets sans nom ni réglages qui pointent
       vers le maillage de l'objet d'origine.
-    Un objet qui partage le maillage d'un autre, ou porte le même nom, en est
-    une copie (les objets venant de FreeCAD ont des noms distincts et chacun
-    son maillage). L'objet d'origine est le premier objet nommé.
+    Un objet nommé est une copie d'un objet de même nom (les objets venant de
+    FreeCAD ont des noms distincts) ; deux objets de noms différents restent
+    distincts même s'ils partagent un maillage. Un objet sans nom est une
+    copie de l'objet dont il partage le maillage. L'objet d'origine est le
+    premier objet nommé.
     """
     ordered = sorted(objects, key=lambda so: so.name is None)   # objets nommés d'abord
     by_mesh, by_name, mains = {}, {}, []
     for so in ordered:
         key = (so.mesh_file, so.mesh_id)
-        main = by_mesh.get(key) or (by_name.get(so.name) if so.name else None)
+        main = by_name.get(so.name) if so.name else by_mesh.get(key)
         if main is not None:
             main.copies.append(so)
             by_mesh.setdefault(key, main)
