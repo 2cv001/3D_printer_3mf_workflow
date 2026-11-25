@@ -178,8 +178,8 @@ TRANSLATIONS = {
         "generate_stl": "En plus du .3mf, générer également un STL",
         "launch_slicer": "Lancer le slicer",
         "browse": "Parcourir…",
-        "linear_label": "Précision (LinearDeflection). Entre 0.01 et 10. Haute qualité : 0.01",
-        "angular_label": "Tolérance angulaire (AngularDeflection) (ex: 3)",
+        "linear_label": "Précision :",
+        "angular_label": "Tolérance angulaire :",
         "external_actions": "Actions externes à exécuter avant fermeture :",
         "ignore_transform": "Ne pas récupérer la position/rotation du slicer",
         "base3mf_label": "Fichier 3MF pour paramètres d'impression :",
@@ -276,9 +276,13 @@ TRANSLATIONS = {
         "reset_message": "Le fichier 3MF existant a été supprimé.\nLa macro va redémarrer pour repartir d’un fichier vierge.",
 
         # Aides / tooltips
-        "hint_linear": "Valeur plus petite = maillage plus fin.\nExemple : 0.01 = haute qualité, mais fichier lourd.\n"
+        "hint_linear": "Précision (LinearDeflection), en mm, entre 0.01 et 10 : écart maximal\n"
+                       "entre le maillage et la vraie surface.\n"
+                       "Valeur plus petite = maillage plus fin.\nExemple : 0.01 = haute qualité, mais fichier lourd.\n"
                        "Exemple : 0.1 = adapté à une imprimante FDM classique.",
-        "hint_angular": "Tolérance angulaire en degrés.\nPetite valeur = plus de détails, mais fichier plus lourd.",
+        "hint_angular": "Tolérance angulaire (AngularDeflection), en degrés (ex. : 3) : angle maximal\n"
+                        "entre deux facettes voisines sur une surface courbe.\n"
+                        "Petite valeur = plus de détails, mais fichier plus lourd.",
         "hint_positions": "Conserve la position XY sur le plateau.\n⚠️ Le Z est toujours recalculé pour éviter que l'objet soit sous le plateau.",
         "no_external_actions": "Pas encore de commandes utilisateur ajoutées.",
         "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
@@ -322,8 +326,8 @@ TRANSLATIONS = {
         "generate_stl": "Also generate an STL along with the 3MF",
         "launch_slicer": "Launch slicer",
         "browse": "Browse…",
-        "linear_label": "Precision (LinearDeflection). Between 0.01 and 10. High quality: 0.01",
-        "angular_label": "Angular tolerance (AngularDeflection) (e.g. 3)",
+        "linear_label": "Precision:",
+        "angular_label": "Angular tolerance:",
         "external_actions": "External actions to execute before closing:",
         "ignore_transform": "Do not recover slicer position/rotation",
         "base3mf_label": "3MF file for print parameters:",
@@ -420,9 +424,13 @@ TRANSLATIONS = {
         "reset_message": "The existing 3MF file has been deleted.\nThe macro will restart with a fresh empty project.",
 
         # Tooltips
-        "hint_linear": "Smaller value = finer mesh.\nExample: 0.01 = high quality but heavy file.\n"
+        "hint_linear": "Precision (LinearDeflection), in mm, between 0.01 and 10: maximum gap\n"
+                       "between the mesh and the real surface.\n"
+                       "Smaller value = finer mesh.\nExample: 0.01 = high quality but heavy file.\n"
                        "Example: 0.1 = suitable for standard FDM printer.",
-        "hint_angular": "Angular tolerance in degrees.\nSmaller value = more detail, but heavier file.",
+        "hint_angular": "Angular tolerance (AngularDeflection), in degrees (e.g. 3): maximum angle\n"
+                        "between two neighbouring facets on a curved surface.\n"
+                        "Smaller value = more detail, but heavier file.",
         "hint_positions": "Keeps XY position on the build plate.\n⚠️  Z is always recalculated to prevent"
                           "the object from going below the build plate.",
         "no_external_actions": "No user commands added yet.",
@@ -468,8 +476,8 @@ TRANSLATIONS = {
         "generate_stl": "Generiere eine STL zusätzlich zu der 3MF",
         "launch_slicer": "Startbefehl Slicer",
         "browse": "Durchsuchen…",
-        "linear_label": "Genauigkeit (LinearDeflection). Zwischen 0.01 und 10. Höchste Qualität: 0.01",
-        "angular_label": "Winkeltoleranz (AngularDeflection) (z.B. 3)",
+        "linear_label": "Genauigkeit:",
+        "angular_label": "Winkeltoleranz:",
         "external_actions": "Weitere Aktionen vor dem Schließen ausführen:",
         "ignore_transform": "Position/Rotation des Slicers nicht wiederherstellen",
         "base3mf_label": "3MF Datei für Druckparameter:",
@@ -565,9 +573,13 @@ TRANSLATIONS = {
         "reset_message": "Die vorhandene 3MF Datei wurde gelöscht.\nDas Makro wird neu gestartet, um mit einem leeren Projekt zu beginnen.",
 
         # Tooltips
-        "hint_linear": "Kleinerer Wert = feineres Netz.\nBeispiel: 0.01 = hohe Qualität, aber große Datei.\n"
+        "hint_linear": "Genauigkeit (LinearDeflection), in mm, zwischen 0.01 und 10: maximaler\n"
+                        "Abstand zwischen Netz und tatsächlicher Oberfläche.\n"
+                        "Kleinerer Wert = feineres Netz.\nBeispiel: 0.01 = hohe Qualität, aber große Datei.\n"
                         "Beispiel: 0.1 = geeignet für einen gewöhnlichen FDM-Drucker.",
-        "hint_angular": "Winkeltoleranz in Grad.\nKleinerer Wert = mehr Details, aber größere Datei.",
+        "hint_angular": "Winkeltoleranz (AngularDeflection), in Grad (z.B. 3): maximaler Winkel\n"
+                        "zwischen zwei benachbarten Facetten auf einer gekrümmten Fläche.\n"
+                        "Kleinerer Wert = mehr Details, aber größere Datei.",
         "hint_positions": "Behält die XY-Position auf dem Druckbett bei.\n⚠️ Die Z-Position wird immer neu berechnet, "
                             "damit das Objekt nicht unter das Druckbett fällt.",
         "no_external_actions": "Es wurden noch keine benutzerdefinierten Befehle hinzugefügt.",
