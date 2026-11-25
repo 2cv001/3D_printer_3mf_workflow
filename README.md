@@ -62,8 +62,8 @@ Run the macro from FreeCAD. The slicer path is set directly in the macro's main 
 On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or "Save" in the menu).
 
 On next launches, enjoy automatic reuse of your settings.
+<img width="1867" height="855" alt="image" src="https://github.com/user-attachments/assets/7f370b71-7b1c-4c5c-9412-b57661290b1b" />
 
-<img width="1603" height="863" alt="Options window" src="https://github.com/user-attachments/assets/3e4fe3e8-5ca2-4088-8b3f-57fdbaa668fb" />
 
 ## Launching other programs or commands
 
@@ -82,7 +82,7 @@ A dedicated helper macro is provided to make configuration easy. Your commands a
 
 The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro).
 
-<img width="781" height="392" alt="Configuration button" src="https://github.com/user-attachments/assets/a64e6207-99c8-46d0-9867-a40d6bd87e70" />
+<img width="1447" height="781" alt="image" src="https://github.com/user-attachments/assets/fec17a25-ab36-4edc-a381-181ddcf055d6" />
 
 - Fill in the fields in the configuration window.
 - Hover your mouse over a column title to display help tooltips.
