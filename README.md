@@ -64,6 +64,9 @@ Run the macro from FreeCAD. The slicer path is set directly in the macro's main 
 On first launch, enter your print settings in the slicer and save the .3mf file (generally, except in Cura, this is just Ctrl+S or "Save" in the menu).
 
 On next launches, enjoy automatic reuse of your settings.
+
+The 3MF is created next to the FreeCAD file. If the document has never been saved, the macro offers to **Save** it, to work in a **Temporary folder**, or to **Cancel**. The temporary folder (in the system temporary folder, shown in the dialog) belongs to this document and this FreeCAD session: it is deleted when FreeCAD closes. If you save the document and run the macro again, the 3MF, with your slicer settings, is moved next to the FreeCAD file. If a 3MF with the same name is already there, the macro asks: **Replace the old one** (kept as a dated `.old` backup), **Keep the old one** (the temporary work is dropped) or **Cancel** (nothing changes; to keep both, rename your object in FreeCAD and run the macro again: the 3MF and the object inside it take the new name). If the project folder cannot be written to, the macro says so and stops.
+
 <img width="1811" height="814" alt="image" src="https://github.com/user-attachments/assets/abeb4cee-a33a-45f1-9a06-cba8176c124f" />
 
 

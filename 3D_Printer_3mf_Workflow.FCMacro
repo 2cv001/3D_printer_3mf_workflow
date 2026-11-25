@@ -47,6 +47,8 @@ import FreeCAD, FreeCADGui, Mesh, MeshPart
 from PySide import QtGui, QtCore
 from typing import Dict, Optional
 import urllib.request
+import tempfile
+import atexit
 
 
 
@@ -239,6 +241,32 @@ TRANSLATIONS = {
         # Messages d'erreur / avertissement
         "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
         "error_no_save": "❌ Le projet n'a pas encore été sauvegardé.",
+        "unsaved_title": "Document non enregistré",
+        "unsaved_text": "Le document « {name} » n'a pas encore été enregistré. Le 3MF est normalement "
+                        "créé à côté du fichier FreeCAD.\n\n"
+                        "• Enregistrer : enregistre le document, puis continue.\n"
+                        "• Dossier temporaire : continue sans enregistrer ; le 3MF est créé dans\n"
+                        "   {folder}\n"
+                        "   Il est effacé à la fermeture de FreeCAD. Si vous enregistrez le document puis\n"
+                        "   relancez la macro, le 3MF (avec vos réglages du slicer) est récupéré à côté du fichier.",
+        "temp_recovered": "3MF récupérés du dossier temporaire, à côté du fichier FreeCAD :\n{names}",
+        "temp_backed_up": "Les anciens fichiers du même nom sont gardés en sauvegarde :\n{names}",
+        "temp_conflict_title": "Conflit de noms",
+        "temp_conflict_text": "Le dossier du document contient déjà :\n{names}\n"
+                              "Votre travail dans le dossier temporaire porte le même nom.\n\n"
+                              "• Remplacer l'ancien : votre travail le remplace (l'ancien est gardé en sauvegarde .old).\n"
+                              "• Garder l'ancien : votre travail temporaire est abandonné.\n"
+                              "• Annuler : rien n'est changé, votre travail reste dans le dossier temporaire. "
+                              "Pour garder les deux, renommez votre objet dans FreeCAD (par exemple Body → Support), "
+                              "puis relancez la macro avant de fermer FreeCAD.",
+        "btn_replace_old": "Remplacer l'ancien",
+        "btn_keep_old": "Garder l'ancien",
+        "unsaved_again_text": "Vous travaillez dans un dossier temporaire (document non enregistré).",
+        "btn_continue_temp": "Continuer en temporaire",
+        "btn_save": "Enregistrer",
+        "btn_temp_folder": "Dossier temporaire",
+        "error_not_writable": "❌ Impossible d'écrire dans le dossier du projet :\n{folder}\n\n"
+                              "Enregistrez le document dans un dossier accessible, puis relancez la macro.",
         "warn_no_selection": "⚠️ Aucun objet sélectionné.",
         "warn_losses": "⚠️ En remplaçant les maillages, ces éléments du projet du slicer seront perdus :\n\n{details}\n\nContinuer ? (Annuler laisse le 3MF tel quel.)",
         "loss_paint": "réglages appliqués sur les faces (supports, couture, couleurs...)",
@@ -391,6 +419,32 @@ TRANSLATIONS = {
         # Error / warning messages
         "error_no_doc": "❌ No document open in FreeCAD.",
         "error_no_save": "❌ The project has not been saved yet.",
+        "unsaved_title": "Document not saved",
+        "unsaved_text": "The document \"{name}\" has not been saved yet. The 3MF is normally "
+                        "created next to the FreeCAD file.\n\n"
+                        "• Save: saves the document, then continues.\n"
+                        "• Temporary folder: continues without saving; the 3MF is created in\n"
+                        "   {folder}\n"
+                        "   It is deleted when FreeCAD closes. If you save the document and run the\n"
+                        "   macro again, the 3MF (with your slicer settings) is moved next to the file.",
+        "temp_recovered": "3MF recovered from the temporary folder, next to the FreeCAD file:\n{names}",
+        "temp_backed_up": "The older files with the same name are kept as backups:\n{names}",
+        "temp_conflict_title": "Name conflict",
+        "temp_conflict_text": "The document folder already contains:\n{names}\n"
+                              "Your work in the temporary folder has the same name.\n\n"
+                              "• Replace the old one: your work replaces it (the old one is kept as a .old backup).\n"
+                              "• Keep the old one: your temporary work is dropped.\n"
+                              "• Cancel: nothing is changed, your work stays in the temporary folder. "
+                              "To keep both, rename your object in FreeCAD (e.g. Body → Support), "
+                              "then run the macro again before closing FreeCAD.",
+        "btn_replace_old": "Replace the old one",
+        "btn_keep_old": "Keep the old one",
+        "unsaved_again_text": "You are working in a temporary folder (document not saved).",
+        "btn_continue_temp": "Continue in temporary folder",
+        "btn_save": "Save",
+        "btn_temp_folder": "Temporary folder",
+        "error_not_writable": "❌ Cannot write in the project folder:\n{folder}\n\n"
+                              "Save the document in an accessible folder, then run the macro again.",
         "warn_no_selection": "⚠️ No object selected.",
         "warn_losses": "⚠️ Replacing the meshes will lose these items of the slicer project:\n\n{details}\n\nContinue? (Cancel leaves the 3MF unchanged.)",
         "loss_paint": "settings applied to faces (supports, seam, colors...)",
@@ -545,6 +599,32 @@ TRANSLATIONS = {
         # Error / warning messages
         "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
         "error_no_save": "❌ Das Projekt wurde noch nicht gespeichert.",
+        "unsaved_title": "Dokument nicht gespeichert",
+        "unsaved_text": "Das Dokument „{name}“ wurde noch nicht gespeichert. Die 3MF wird normalerweise "
+                        "neben der FreeCAD-Datei erstellt.\n\n"
+                        "• Speichern: speichert das Dokument und fährt fort.\n"
+                        "• Temporärer Ordner: fährt ohne Speichern fort; die 3MF wird erstellt in\n"
+                        "   {folder}\n"
+                        "   Er wird beim Schließen von FreeCAD gelöscht. Wenn Sie das Dokument speichern und\n"
+                        "   das Makro erneut starten, wird die 3MF (mit den Slicer-Einstellungen) neben die Datei verschoben.",
+        "temp_recovered": "3MF aus dem temporären Ordner neben die FreeCAD-Datei verschoben:\n{names}",
+        "temp_backed_up": "Ältere Dateien mit gleichem Namen werden als Sicherung behalten:\n{names}",
+        "temp_conflict_title": "Namenskonflikt",
+        "temp_conflict_text": "Der Ordner des Dokuments enthält bereits:\n{names}\n"
+                              "Ihre Arbeit im temporären Ordner hat denselben Namen.\n\n"
+                              "• Alte ersetzen: Ihre Arbeit ersetzt sie (die alte wird als .old gesichert).\n"
+                              "• Alte behalten: Ihre temporäre Arbeit wird verworfen.\n"
+                              "• Abbrechen: nichts wird geändert, Ihre Arbeit bleibt im temporären Ordner. "
+                              "Um beide zu behalten, benennen Sie Ihr Objekt in FreeCAD um (z.B. Body → Support) "
+                              "und starten Sie das Makro vor dem Schließen von FreeCAD erneut.",
+        "btn_replace_old": "Alte ersetzen",
+        "btn_keep_old": "Alte behalten",
+        "unsaved_again_text": "Sie arbeiten in einem temporären Ordner (Dokument nicht gespeichert).",
+        "btn_continue_temp": "Im temporären Ordner fortfahren",
+        "btn_save": "Speichern",
+        "btn_temp_folder": "Temporärer Ordner",
+        "error_not_writable": "❌ Im Projektordner kann nicht geschrieben werden:\n{folder}\n\n"
+                              "Speichern Sie das Dokument in einem zugänglichen Ordner und starten Sie das Makro erneut.",
         "warn_no_selection": "⚠️ Kein Objekt ist ausgewählt.",
         "warn_losses": "⚠️ Beim Ersetzen der Netze gehen diese Elemente des Slicer-Projekts verloren:\n\n{details}\n\nFortfahren? (Abbrechen lässt die 3MF Datei unverändert.)",
         "loss_paint": "auf Flächen angewendete Einstellungen (Stützen, Naht, Farben...)",
@@ -647,6 +727,274 @@ def tr(key):
 # Affiche une boîte de message d’information dans FreeCAD
 def show_message(title, message):
     QtGui.QMessageBox.information(None, title, message)
+
+
+def folder_is_writable(folder):
+    """
+    Vrai si l'on peut créer un fichier dans `folder` (essai réel : création
+    puis suppression d'un petit fichier). Évite d'exporter vers un dossier
+    inaccessible, par exemple après un « Enregistrer sous » refusé : FreeCAD
+    associe alors au document un fichier qui ne peut pas exister.
+    """
+    if not folder or not os.path.isdir(folder):
+        return False
+    test = os.path.join(folder, f".3mf_workflow_write_test_{os.getpid()}")
+    try:
+        with open(test, "wb") as f:
+            f.write(b"x")
+        ok = os.path.exists(test)
+        os.remove(test)
+        return ok
+    except OSError:
+        return False
+
+
+TEMP_ROOT = os.path.join(tempfile.gettempdir(), "FreeCAD_3mf_workflow")
+
+
+def _safe_name(text):
+    return re.sub(r"[^\w.-]+", "_", text or "").strip("._") or "FreeCAD"
+
+
+def temporary_folder(doc):
+    """
+    Dossier temporaire d'un document jamais enregistré. Nommé d'après le
+    numéro de cette session de FreeCAD et le nom interne du document
+    (Unnamed…), qui ne change pas à l'enregistrement, contrairement au
+    libellé : on le retrouve après « Enregistrer », et deux sessions ne se
+    mélangent jamais.
+    """
+    return os.path.join(TEMP_ROOT, f"{os.getpid()}_{_safe_name(doc.Name)}")
+
+
+def temporary_project_path(doc):
+    """
+    Chemin (fictif) du projet pour un document jamais enregistré : les
+    exports suivants y retrouvent le 3MF et ses réglages du slicer.
+    """
+    return os.path.join(temporary_folder(doc), _safe_name(doc.Label or doc.Name) + ".FCStd")
+
+
+def _process_running(pid):
+    """Vrai si le processus `pid` existe encore (sans lui envoyer de signal)."""
+    try:
+        if platform.system() == "Windows":
+            import ctypes
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))
+            if not handle:
+                return False
+            code = ctypes.c_ulong()
+            ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return code.value == 259           # STILL_ACTIVE
+        os.kill(int(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True                            # dans le doute, on ne supprime rien
+
+
+def remove_session_temp_folders():
+    """À la fermeture de FreeCAD : efface les dossiers temporaires de cette session."""
+    try:
+        for name in os.listdir(TEMP_ROOT):
+            if name.startswith(f"{os.getpid()}_"):
+                shutil.rmtree(os.path.join(TEMP_ROOT, name), ignore_errors=True)
+    except OSError:
+        pass
+
+
+def cleanup_stale_temp_folders():
+    """Efface les dossiers temporaires laissés par des sessions de FreeCAD fermées (plantage…)."""
+    try:
+        for name in os.listdir(TEMP_ROOT):
+            m = re.match(r"^(\d+)_", name)
+            if m and int(m.group(1)) != os.getpid() and not _process_running(m.group(1)):
+                shutil.rmtree(os.path.join(TEMP_ROOT, name), ignore_errors=True)
+    except OSError:
+        pass
+
+
+def register_temp_cleanup():
+    """Enregistre une seule fois par session l'effacement à la fermeture de FreeCAD."""
+    if not getattr(sys, "_3mf_workflow_cleanup_registered", False):
+        atexit.register(remove_session_temp_folders)
+        sys._3mf_workflow_cleanup_registered = True
+
+
+TEMP_MANIFEST = "objects.json"
+
+
+def remember_temporary_export(doc, fc_3mf, selection):
+    """
+    Export dans le dossier temporaire : mémorise les objets FreeCAD (par leur
+    nom interne, qui ne change pas quand on les renomme) qui ont produit ce
+    3MF et leur nom dans le 3MF, pour la récupération après enregistrement.
+    """
+    import json
+    path = os.path.join(os.path.dirname(fc_3mf), TEMP_MANIFEST)
+    try:
+        data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+    except Exception:
+        data = {}
+    data[os.path.basename(fc_3mf)] = {
+        obj.Name: os.path.basename(get_export_base_name(doc, obj)) for obj in selection}
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass
+
+
+def _plan_temporary_recovery(doc, folder, project_folder):
+    """
+    Pour chaque 3MF du dossier temporaire : (fichier temporaire, nom de
+    destination, renommages {ancien nom d'objet: nouveau}). Si des objets ont
+    été renommés dans FreeCAD depuis l'export, le 3MF prend le nouveau nom
+    (et ses objets aussi), ce qui évite un conflit avec un 3MF déjà présent.
+    """
+    import json
+    try:
+        manifest = json.load(open(os.path.join(folder, TEMP_MANIFEST), encoding="utf-8"))
+    except Exception:
+        manifest = {}
+    plan = []
+    for name in sorted(os.listdir(folder)):
+        low = name.lower()
+        if not low.endswith(".3mf") or ".old." in low or low.endswith(".old.3mf"):
+            continue
+        dest_name, renames = name, {}
+        objects = manifest.get(name) or {}
+        current = {}
+        for internal, old_label in objects.items():
+            obj = doc.getObject(internal)
+            if obj is None:
+                current = {}
+                break
+            current[internal] = os.path.basename(get_export_base_name(doc, obj))
+        if current:
+            renames = {objects[k]: v for k, v in current.items() if objects[k] != v}
+            if renames:
+                names = sorted(current.values(), key=str.casefold)
+                dest_name = build_export_file_name(names) + ".3mf"
+        plan.append((name, dest_name, renames))
+    return plan
+
+
+def ask_recover_conflict_dialog(names):
+    """Conflit de noms à la récupération : "replace", "keep_old" ou "cancel"."""
+    box = QtGui.QMessageBox()
+    box.setIcon(QtGui.QMessageBox.Warning)
+    box.setWindowTitle(tr("temp_conflict_title"))
+    box.setText(tr("temp_conflict_text").format(names="\n".join("• " + n for n in names)))
+    btn_replace = box.addButton(tr("btn_replace_old"), QtGui.QMessageBox.AcceptRole)
+    btn_keep = box.addButton(tr("btn_keep_old"), QtGui.QMessageBox.DestructiveRole)
+    btn_cancel = box.addButton(tr("btn_cancel"), QtGui.QMessageBox.RejectRole)
+    box.setDefaultButton(btn_cancel)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked == btn_replace:
+        return "replace"
+    if clicked == btn_keep:
+        return "keep_old"
+    return "cancel"
+
+
+def _write_renamed_3mf(src_path, dest_path, renames):
+    """Copie le 3MF en renommant ses objets ({ancien nom: nouveau}) là où le slicer les lit."""
+    entries = read_3mf_entries(src_path)
+    texts = {}
+
+    def text(n):
+        if n not in texts:
+            texts[n] = entries[n].decode("utf-8", errors="replace") if n in entries else None
+        return texts[n]
+    for so in analyse_slicer_objects(entries):
+        for o in [so] + so.copies:
+            if o.name in renames:
+                _rename_object(text, texts, o.obj_id, renames[o.name], o.name)
+    result = {n: (texts[n].encode("utf-8") if n in texts and texts[n] is not None else d)
+              for n, d in entries.items()}
+    write_3mf_entries(dest_path, result)
+
+
+def recover_temporary_3mf(doc, project_folder):
+    """
+    Document enregistré après un export dans le dossier temporaire : place
+    les 3MF de ce dossier à côté du fichier FreeCAD (sous le nouveau nom si
+    les objets ont été renommés). Si un 3MF du même nom y est déjà, on demande :
+    remplacer l'ancien (gardé en sauvegarde datée), garder l'ancien (travail
+    temporaire abandonné) ou annuler (rien ne change, le dossier temporaire
+    est gardé). Retourne ("ok" ou "cancel", récupérés, sauvegardes créées).
+    """
+    folder = temporary_folder(doc)
+    moved, backups = [], []
+    if not os.path.isdir(folder):
+        return "ok", moved, backups
+    plan = _plan_temporary_recovery(doc, folder, project_folder)
+    conflicts = [dest for (_, dest, _) in plan if os.path.exists(os.path.join(project_folder, dest))]
+    choice = ask_recover_conflict_dialog(conflicts) if conflicts else "replace"
+    if choice == "cancel":
+        return "cancel", moved, backups
+    failed = False
+    for name, dest_name, renames in plan:
+        src = os.path.join(folder, name)
+        dest = os.path.join(project_folder, dest_name)
+        try:
+            if os.path.exists(dest):
+                if choice == "keep_old":
+                    continue                  # travail temporaire abandonné
+                before = set(os.listdir(project_folder))
+                rotate_old_backups(os.path.splitext(dest)[0], MAX_OLD_BACKUPS)
+                backups += sorted(set(os.listdir(project_folder)) - before)
+            if renames:
+                _write_renamed_3mf(src, dest, renames)
+            else:
+                shutil.copy(src, dest + ".tmp")
+                os.replace(dest + ".tmp", dest)
+            moved.append(name if name == dest_name else f"{name} → {dest_name}")
+        except Exception as e:
+            if DEBUG: print("⚠️ Récupération impossible :", name, e)
+            failed = True
+    if not failed:
+        shutil.rmtree(folder, ignore_errors=True)
+    return "ok", moved, backups
+
+
+def project_path(doc):
+    """Chemin du projet FreeCAD : son fichier, ou le chemin temporaire s'il n'est pas enregistré."""
+    return doc.FileName or temporary_project_path(doc)
+
+
+def ask_unsaved_dialog(doc):
+    """
+    Document jamais enregistré : "save", "temp" ou "cancel". Message détaillé
+    la première fois ; message court quand on travaille déjà dans le dossier
+    temporaire (« Continuer en temporaire » par défaut).
+    """
+    folder = temporary_folder(doc)
+    already = os.path.isdir(folder) and any(f.lower().endswith(".3mf") for f in os.listdir(folder))
+    box = QtGui.QMessageBox()
+    box.setIcon(QtGui.QMessageBox.Question)
+    box.setWindowTitle(tr("unsaved_title"))
+    if already:
+        box.setText(tr("unsaved_again_text"))
+        box.setToolTip(folder)
+    else:
+        box.setText(tr("unsaved_text").format(name=doc.Label, folder=folder))
+    btn_save = box.addButton(tr("btn_save"), QtGui.QMessageBox.AcceptRole)
+    btn_temp = box.addButton(tr("btn_continue_temp") if already else tr("btn_temp_folder"),
+                             QtGui.QMessageBox.ActionRole)
+    box.addButton(tr("btn_cancel"), QtGui.QMessageBox.RejectRole)
+    box.setDefaultButton(btn_temp if already else btn_save)
+    box.exec()
+    clicked = box.clickedButton()
+    if clicked == btn_save:
+        return "save"
+    if clicked == btn_temp:
+        return "temp"
+    return "cancel"
 
 # -------------------------
 # Rotation des sauvegardes
@@ -3587,8 +3935,45 @@ def prepare_environment():
 
     fcstd_path = doc.FileName
     if not fcstd_path:
-        show_message(tr("error_title"), tr("error_no_save"))
+        # Document jamais enregistré : enregistrer, dossier temporaire ou annuler
+        choice = ask_unsaved_dialog(doc)
+        if choice == "cancel":
+            return None
+        if choice == "save":
+            try:
+                FreeCADGui.runCommand("Std_SaveAs", 0)
+            except Exception as e:
+                if DEBUG: print("⚠️ Enregistrement impossible :", e)
+            fcstd_path = doc.FileName
+            if not fcstd_path:
+                return None                  # « Enregistrer sous » annulé
+        else:
+            fcstd_path = temporary_project_path(doc)
+            try:
+                os.makedirs(os.path.dirname(fcstd_path), exist_ok=True)
+            except OSError:
+                pass
+
+    # Le dossier doit être accessible en écriture (sinon FreeCAD peut planter)
+    project_folder = os.path.dirname(fcstd_path)
+    if not folder_is_writable(project_folder):
+        show_message(tr("error_title"), tr("error_not_writable").format(folder=project_folder))
         return None
+
+    # Dossiers temporaires : effacés à la fermeture de FreeCAD ; ceux des
+    # sessions fermées sans pouvoir le faire sont effacés ici
+    register_temp_cleanup()
+    cleanup_stale_temp_folders()
+    if doc.FileName:
+        # Document enregistré après un export dans le dossier temporaire
+        status, moved, backups = recover_temporary_3mf(doc, project_folder)
+        if status == "cancel":
+            return None
+        if moved:
+            lines = [tr("temp_recovered").format(names="\n".join("• " + n for n in moved))]
+            if backups:
+                lines.append(tr("temp_backed_up").format(names="\n".join("• " + n for n in backups)))
+            show_message(tr("info_title"), "\n\n".join(lines))
 
     selection = get_valid_selection()
     if selection is None:
@@ -4111,6 +4496,8 @@ def export_replace_geometry():
     except Exception as e:
         show_message(tr("error_title"), f"{tr('error_export_3mf')} {e}")
         return
+    if not doc.FileName:
+        remember_temporary_export(doc, fc_3mf, selection)
     if DEBUG:
         print("📦 Fichier final généré pour le slicer :", fc_3mf)
 
@@ -4122,7 +4509,7 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 11) Commandes externes
     # ------------------------------------------------------------
-    run_extra_commands(extra_cmds, doc.FileName, base_name)
+    run_extra_commands(extra_cmds, project_path(doc), base_name)
 
 
 def run_macro():
