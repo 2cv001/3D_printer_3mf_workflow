@@ -210,9 +210,11 @@ TRANSLATIONS = {
                            "FreeCAD restera bloqué pendant ce temps.\n\n"
                            "Continuer quand même ?",
         "btn_back_options": "Revenir aux options",
-        "export_estimate": "Export estimé : environ {tri} triangles, {time}, 3MF de {size}",
-        "export_estimate_pending": "Export estimé : calcul en cours…",
-        "export_estimate_failed": "Export estimé : estimation impossible",
+        "fineness_group": "Finesse du maillage",
+        "export_time": "Temps export : ~{time}",
+        "export_time_pending": "Temps export : …",
+        "export_time_failed": "Temps export : ?",
+        "export_details": "{tri} triangles · 3MF de {size}",
         "target_time_label": "Temps d'export visé :",
         "btn_optimize": "Optimiser la finesse",
         "hint_optimize": "Choisit la précision et la tolérance angulaire les plus fines dont\n"
@@ -352,9 +354,11 @@ TRANSLATIONS = {
                            "FreeCAD will be frozen meanwhile.\n\n"
                            "Continue anyway?",
         "btn_back_options": "Back to options",
-        "export_estimate": "Estimated export: about {tri} triangles, {time}, 3MF of {size}",
-        "export_estimate_pending": "Estimated export: computing…",
-        "export_estimate_failed": "Estimated export: estimate not available",
+        "fineness_group": "Mesh fineness",
+        "export_time": "Export time: ~{time}",
+        "export_time_pending": "Export time: …",
+        "export_time_failed": "Export time: ?",
+        "export_details": "{tri} triangles · 3MF of {size}",
         "target_time_label": "Target export time:",
         "btn_optimize": "Optimize fineness",
         "hint_optimize": "Chooses the finest precision and angular tolerance whose estimated\n"
@@ -496,9 +500,11 @@ TRANSLATIONS = {
                            "FreeCAD ist währenddessen blockiert.\n\n"
                            "Trotzdem fortfahren?",
         "btn_back_options": "Zurück zu den Optionen",
-        "export_estimate": "Geschätzter Export: etwa {tri} Dreiecke, {time}, 3MF von {size}",
-        "export_estimate_pending": "Geschätzter Export: wird berechnet…",
-        "export_estimate_failed": "Geschätzter Export: keine Schätzung möglich",
+        "fineness_group": "Netzfeinheit",
+        "export_time": "Exportzeit: ~{time}",
+        "export_time_pending": "Exportzeit: …",
+        "export_time_failed": "Exportzeit: ?",
+        "export_details": "{tri} Dreiecke · 3MF von {size}",
         "target_time_label": "Angestrebte Exportzeit:",
         "btn_optimize": "Feinheit optimieren",
         "hint_optimize": "Wählt die feinste Genauigkeit und Winkeltoleranz, deren geschätzter\n"
@@ -1293,12 +1299,16 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     combo_base3mf.currentIndexChanged.connect(update_base_info)
     update_base_info()
 
-    # Précision linéaire
-    h_lin = QtGui.QHBoxLayout()
-    lbl_lin = QtGui.QLabel(tr("linear_label"))
-    lbl_lin.setMinimumWidth(420)
-    h_lin.addWidget(lbl_lin)
+    # ------------------------------------------------------------
+    # Panneau « Finesse du maillage » : précision, tolérance angulaire,
+    # temps d'export estimé (à droite, entre les deux champs) et optimisation
+    # ------------------------------------------------------------
+    group_fineness = QtGui.QGroupBox(tr("fineness_group"))
+    grid = QtGui.QGridLayout(group_fineness)
+    grid.setColumnStretch(4, 1)
 
+    lbl_lin = QtGui.QLabel(tr("linear_label"))
+    lbl_lin.setToolTip(tr("hint_linear"))
     spin_lin = QtGui.QDoubleSpinBox()
     spin_lin.setToolTip(tr("hint_linear"))
     spin_lin.setRange(0.01, 10.0)
@@ -1309,19 +1319,12 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         spin_lin.setValue(round(float(current_linear), 2))
     except Exception:
         spin_lin.setValue(DEFAULT_LINEAR_DEFLECTION)
-    h_lin.addWidget(spin_lin)
-    lbl_lin_unit = QtGui.QLabel("mm")
-    h_lin.addWidget(lbl_lin_unit)
+    grid.addWidget(lbl_lin, 0, 0)
+    grid.addWidget(spin_lin, 0, 1)
+    grid.addWidget(QtGui.QLabel("mm"), 0, 2)
 
-    h_lin.addStretch()
-    layout.addLayout(h_lin)
-
-    # Tolérance angulaire
-    h_ang = QtGui.QHBoxLayout()
     lbl_ang = QtGui.QLabel(tr("angular_label"))
-    lbl_ang.setMinimumWidth(420)
-    h_ang.addWidget(lbl_ang)
-
+    lbl_ang.setToolTip(tr("hint_angular"))
     spin_ang = QtGui.QDoubleSpinBox()
     spin_ang.setToolTip(tr("hint_angular"))
     spin_ang.setRange(0.01, 90.0)
@@ -1333,38 +1336,37 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         spin_ang.setValue(deg)
     except Exception:
         spin_ang.setValue(DEFAULT_ANGULAR_DEGREES)
-    h_ang.addWidget(spin_ang)
-    lbl_ang_unit = QtGui.QLabel("°")
-    h_ang.addWidget(lbl_ang_unit)
+    grid.addWidget(lbl_ang, 1, 0)
+    grid.addWidget(spin_ang, 1, 1)
+    grid.addWidget(QtGui.QLabel("°"), 1, 2)
 
-    h_ang.addStretch()
-    layout.addLayout(h_ang)
+    # Temps d'export estimé : à droite, à mi-hauteur des deux champs
+    lbl_time = QtGui.QLabel(tr("export_time_pending") if selection else "")
+    lbl_time.setTextFormat(QtCore.Qt.RichText)
+    lbl_time.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+    grid.addItem(QtGui.QSpacerItem(24, 1), 0, 3)
+    grid.addWidget(lbl_time, 0, 4, 2, 1)
 
-    # Export estimé (mis à jour en direct) et « Optimiser la finesse »
-    lbl_estimate = QtGui.QLabel(tr("export_estimate_pending"))
-    lbl_estimate.setWordWrap(True)
-    h_estimate = QtGui.QHBoxLayout()
-    h_estimate.addSpacing(20)
-    h_estimate.addWidget(lbl_estimate, stretch=1)
-    layout.addLayout(h_estimate)
-
-    h_target = QtGui.QHBoxLayout()
+    # Temps visé + « Optimiser la finesse »
     lbl_target = QtGui.QLabel(tr("target_time_label"))
     lbl_target.setToolTip(tr("hint_optimize"))
-    h_target.addWidget(lbl_target)
     spin_target = QtGui.QSpinBox()
     spin_target.setRange(1, 3600)
     spin_target.setValue(get_target_export_seconds())
     spin_target.setMaximumWidth(80)
     spin_target.setToolTip(tr("hint_optimize"))
-    h_target.addWidget(spin_target)
-    h_target.addWidget(QtGui.QLabel("s"))
     btn_optimize = QtGui.QPushButton(tr("btn_optimize"))
     btn_optimize.setToolTip(tr("hint_optimize"))
     btn_optimize.setEnabled(False)
-    h_target.addWidget(btn_optimize)
-    h_target.addStretch()
-    layout.addLayout(h_target)
+    grid.addWidget(lbl_target, 2, 0)
+    grid.addWidget(spin_target, 2, 1)
+    grid.addWidget(QtGui.QLabel("s"), 2, 2)
+    h_opt = QtGui.QHBoxLayout()
+    h_opt.addWidget(btn_optimize)
+    h_opt.addStretch()
+    grid.addLayout(h_opt, 2, 4)
+
+    layout.addWidget(group_fineness)
 
     cost = {"model": None}
 
@@ -1374,11 +1376,14 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             return
         n, seconds = model.estimate(float(spin_lin.value()),
                                     math.radians(float(spin_ang.value())))
-        lbl_estimate.setText(tr("export_estimate").format(
-            tri=_format_triangles(n), time=_format_duration(seconds),
-            size=_format_size(n * BYTES_PER_TRIANGLE)))
         heavy = n > HEAVY_MESH_TRIANGLES or seconds > HEAVY_MESH_SECONDS
-        lbl_estimate.setStyleSheet("color: #d97706;" if heavy else "")
+        color = "#d97706" if heavy else "palette(text)"
+        details = tr("export_details").format(tri=_format_triangles(n),
+                                              size=_format_size(n * BYTES_PER_TRIANGLE))
+        lbl_time.setText(
+            f'<span style="font-size:11pt; font-weight:600; color:{color};">'
+            f'{_html_escape(tr("export_time").format(time=_format_duration(seconds)))}</span>'
+            f'<br><span style="color:gray;">{_html_escape(details)}</span>')
 
     def build_estimate():
         # Après l'affichage de la fenêtre : les maillages d'essai prennent
@@ -1392,7 +1397,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         cost["model"] = model
         remember_mesh_cost_model(selection, model)
         if model is None:
-            lbl_estimate.setText(tr("export_estimate_failed"))
+            lbl_time.setText(tr("export_time_failed"))
             return
         btn_optimize.setEnabled(True)
         update_estimate()
@@ -1413,8 +1418,6 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     btn_optimize.clicked.connect(optimize)
     if selection:
         QtCore.QTimer.singleShot(0, build_estimate)
-    else:
-        lbl_estimate.setText("")
 
     # Cases pour les commandes externes
     extra_checks = []
@@ -2099,6 +2102,10 @@ def _format_duration(seconds):
     if seconds < 48 * 3600:
         return tr("unit_hours").format(n=int(round(seconds / 3600)))
     return tr("unit_days").format(n=int(seconds // 86400))
+
+
+def _html_escape(text):
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _format_decimal(value):
