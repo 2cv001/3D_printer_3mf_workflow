@@ -145,12 +145,15 @@ triangles, it asks first: **Continue** or **Back to options** to choose
 coarser values. The estimate is approximate, but enough to spot a value that is
 much too fine.
 
-### Estimated export and fineness optimization
+### Mesh fineness panel
 
-Below the precision and angular tolerance fields, **Estimated export** shows
-the number of triangles, the time and the 3MF size for the selected objects. It
-is computed when the window opens (usually in less than a second) and updated
-live while you change the values; it turns orange above the warning limits.
+The **Mesh fineness** panel of the options window holds the **Precision**
+(LinearDeflection, in mm) and the **Angular tolerance** (AngularDeflection, in
+degrees); their tooltips explain them. On the right, **Export time** shows the
+estimated time for the selected objects, with the number of triangles and the
+3MF size below. It is computed when the window opens (usually in less than a
+second) and updated live while you change the values; it turns orange above the
+warning limits.
 
 **Optimize fineness** chooses the finest precision and angular tolerance whose
 estimated export fits in the **Target export time** (remembered between
