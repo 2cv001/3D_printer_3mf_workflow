@@ -35,7 +35,8 @@ The macro exports the selected objects to a 3MF file using the specified tessell
 
 ## Workflow Overview
 
-<img width="1146" height="926" alt="Workflow overview" src="https://github.com/user-attachments/assets/027e2229-5d79-4ba0-afb9-e2ffd685db95" />
+<img width="758" height="538" alt="image" src="https://github.com/user-attachments/assets/906aec99-9ee0-40b3-83de-c9d557107a57" />
+
 
 ### First Launch
 
