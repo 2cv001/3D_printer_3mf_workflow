@@ -270,10 +270,6 @@ TRANSLATIONS = {
         "info_done": "✅ Export terminé. Le slicer n'a pas été lancé (option décochée).",
         "info_export_fc": "✅ Fichier généré uniquement par FreeCAD :",
         "info_export_slicer": "✅ Export avec récupération des paramètres du slicer :",
-        "reset_all": "Repartir de zéro (ne rien conserver)",
-        "hint_reset_all": "Supprime le fichier 3MF existant et relance la macro pour repartir d’un fichier vierge.",
-        "reset_title": "Réinitialisation",
-        "reset_message": "Le fichier 3MF existant a été supprimé.\nLa macro va redémarrer pour repartir d’un fichier vierge.",
 
         # Aides / tooltips
         "hint_linear": "Précision (LinearDeflection), en mm, entre 0.01 et 10 : écart maximal\n"
@@ -418,10 +414,6 @@ TRANSLATIONS = {
         "info_done": "✅ Export finished. Slicer was not launched (option unchecked).",
         "info_export_fc": "✅ File generated only by FreeCAD:",
         "info_export_slicer": "✅ Export with slicer settings recovered:",
-        "reset_all": "Start from scratch (discard everything)",
-        "hint_reset_all": "Deletes the existing 3MF file and restarts the macro with a fresh empty project.",
-        "reset_title": "Reset",
-        "reset_message": "The existing 3MF file has been deleted.\nThe macro will restart with a fresh empty project.",
 
         # Tooltips
         "hint_linear": "Precision (LinearDeflection), in mm, between 0.01 and 10: maximum gap\n"
@@ -567,10 +559,6 @@ TRANSLATIONS = {
         "info_done": "✅ Export abgeschlossen. Der Slicer wurde nicht gestartet (Option nicht aktiviert).",
         "info_export_fc": "✅ Datei wurde ausschließlich von FreeCAD erzeugt:",
         "info_export_slicer": "✅ Export mit übernommenen Slicer-Einstellungen:",
-        "reset_all": "Von vorne beginnen (alles verwerfen)",
-        "hint_reset_all": "Löscht die vorhandene 3MF Datei und startet das Makro mit einem neuen, leeren Projekt neu.",
-        "reset_title": "Zurücksetzen",
-        "reset_message": "Die vorhandene 3MF Datei wurde gelöscht.\nDas Makro wird neu gestartet, um mit einem leeren Projekt zu beginnen.",
 
         # Tooltips
         "hint_linear": "Genauigkeit (LinearDeflection), in mm, zwischen 0.01 und 10: maximaler\n"
@@ -1363,10 +1351,6 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     chk_stl.setToolTip(tr("hint_generate_stl"))
     chk_stl.setChecked(False)
 
-    # Nouvelle case : repartir de zéro
-    chk_reset = QtGui.QCheckBox(tr("reset_all"))
-    chk_reset.setToolTip(tr("hint_reset_all"))
-    chk_reset.setChecked(False)
 
     # Haut de la fenêtre : cases à gauche, aperçu des objets sélectionnés à droite
     h_top = QtGui.QHBoxLayout()
@@ -1379,7 +1363,6 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     h_top.addWidget(lbl_preview, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
     layout.addLayout(h_top)
 
-    v_top_left.addWidget(chk_reset)
     v_top_left.addWidget(chk_stl)
 
     # Nouvelle case : ignorer la position/rotation du slicer
@@ -1755,14 +1738,13 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             chk_launch.isChecked(),
             linear_val,
             angular_rad,
-            chk_reset.isChecked(),
             chk_ignore_transform.isChecked(),
             [(chk.isChecked(), cmd, delay) for chk, cmd, delay in extra_checks],
         )
 
 
     else:
-        return (None, None, None, None, None, None, None, None, [])
+        return (None, None, None, None, None, None, None, [])
 
 def get_user_options(cfg, fc_3mf, names=(), selection=()):
     """
@@ -1791,7 +1773,7 @@ def get_user_options(cfg, fc_3mf, names=(), selection=()):
         # Appel de la boîte de dialogue utilisateur
         (generate_stl,
          slicer_path, base3mf_path, launch_slicer,
-         linear_value, angular_value, reset_all,
+         linear_value, angular_value,
          ignore_transform, extra_cmds) = ask_user_options(
             slicer_path_pref, linear_pref, angular_pref, ignore_transform_pref, fc_3mf,
             cfg.get("recent_base3mf", []), names, selection
@@ -1836,7 +1818,6 @@ def get_user_options(cfg, fc_3mf, names=(), selection=()):
         launch_slicer,
         linear_value,
         angular_value,
-        reset_all,
         ignore_transform,
         extra_cmds
     )
@@ -3824,17 +3805,7 @@ def export_replace_geometry():
 
     (generate_stl,
      slicer_path, base3mf_path, launch_slicer,
-     linear_value, angular_value, reset_all, ignore_transform, extra_cmds) = opts
-
-    # Reset complet
-    if reset_all:
-        if fc_3mf and os.path.exists(fc_3mf):
-            if DEBUG:
-                print('Suppression', os.path.basename(fc_3mf))
-            os.remove(fc_3mf)
-
-        show_message(tr("reset_title"), tr("reset_message"))
-        return "restart"
+     linear_value, angular_value, ignore_transform, extra_cmds) = opts
 
     # Maillage très fin : on prévient avant de bloquer FreeCAD longtemps.
     # « Revenir aux options » rouvre la fenêtre (rien n'a encore été écrit).
