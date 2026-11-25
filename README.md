@@ -67,6 +67,11 @@ and objects are reused:
   full path.
 - **Browse…** picks a 3MF anywhere, for example in another project.
 
+Each 3MF of the list shows its thumbnail: the preview image saved in the file by
+the slicer (plate image for QIDIStudio / Bambu / Orca, thumbnail for Cura /
+SuperSlicer / FreeCAD). It is only read from the file, so it costs nothing; a
+3MF without a preview image simply has no thumbnail.
+
 Below the list, the macro shows the name the 3MF will be saved as and explains
 what the chosen base will do: for which objects the existing settings are kept,
 which objects are new (they get the general settings), and whether the base

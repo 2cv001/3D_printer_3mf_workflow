@@ -996,6 +996,43 @@ def list_base3mf_choices(fc_3mf, recent):
     return choices
 
 
+# Images d'aperçu enregistrées par les slicers, par ordre de préférence
+THUMBNAIL_NAMES = ("Metadata/plate_1_small.png", "Metadata/plate_1.png", "Metadata/thumbnail.png")
+THUMBNAIL_MAX_BYTES = 2_000_000
+BASE3MF_ICON_SIZE = 40
+
+
+def base3mf_thumbnail(path):
+    """
+    Image d'aperçu (PNG) enregistrée dans un 3MF par le slicer : plateau pour
+    QIDIStudio / Bambu / Orca, vignette pour Cura / SuperSlicer / FreeCAD.
+    Simple lecture dans l'archive ; None si le fichier n'en a pas ou n'est
+    pas lisible.
+    """
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            available = {i.filename: i for i in z.infolist()}
+            for name in THUMBNAIL_NAMES:
+                info = available.get(name)
+                if info and 0 < info.file_size <= THUMBNAIL_MAX_BYTES:
+                    return z.read(name)
+    except Exception:
+        pass
+    return None
+
+
+class _ThumbnailDelegate(QtGui.QStyledItemDelegate):
+    """Lignes de la liste des 3MF de base : vignette de BASE3MF_ICON_SIZE pixels."""
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.decorationSize = QtCore.QSize(BASE3MF_ICON_SIZE, BASE3MF_ICON_SIZE)
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QtCore.QSize(size.width(), max(size.height(), BASE3MF_ICON_SIZE + 4))
+
+
 def base3mf_objects(path):
     """
     Objets d'un 3MF enregistré par un slicer, lus dans ses fichiers de
@@ -1230,9 +1267,53 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         fm = combo_base3mf.fontMetrics()
         texts = [combo_base3mf.itemText(i) for i in range(combo_base3mf.count())]
         width = max((fm.boundingRect(t).width() for t in texts), default=0) + 40
-        combo_base3mf.view().setMinimumWidth(width)
+        combo_base3mf.view().setMinimumWidth(width + BASE3MF_ICON_SIZE + 8)
 
     widen_base3mf_popup()
+
+    # Vignettes : image d'aperçu de chaque 3MF (celle du slicer), chargées une
+    # à une après l'ouverture de la fenêtre pour qu'elle reste réactive.
+    # Les lignes sans image gardent une icône vide, pour aligner les textes.
+    # Grande vignette dans la liste déroulée (délégué propre à la liste),
+    # petite dans la case fermée
+    combo_base3mf.setIconSize(QtCore.QSize(16, 16))
+    combo_base3mf._thumbnail_delegate = _ThumbnailDelegate(combo_base3mf)
+    combo_base3mf.setItemDelegate(combo_base3mf._thumbnail_delegate)
+    blank = QtGui.QPixmap(BASE3MF_ICON_SIZE, BASE3MF_ICON_SIZE)
+    blank.fill(QtCore.Qt.transparent)
+    blank_icon = QtGui.QIcon(blank)
+    for i in range(combo_base3mf.count()):
+        combo_base3mf.setItemIcon(i, blank_icon)
+
+    def thumbnail_icon(path):
+        data = base3mf_thumbnail(path) if path else None
+        if not data:
+            return None
+        pix = QtGui.QPixmap()
+        if not pix.loadFromData(data) or pix.isNull():
+            return None
+        pix = pix.scaled(BASE3MF_ICON_SIZE, BASE3MF_ICON_SIZE,
+                         QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        return QtGui.QIcon(pix)
+
+    pending_icons = list(range(1, combo_base3mf.count()))
+
+    def load_next_icon():
+        if not pending_icons:
+            return
+        i = pending_icons.pop(0)
+        if i < combo_base3mf.count():
+            try:
+                icon = thumbnail_icon(combo_base3mf.itemData(i))
+                if icon is not None:
+                    combo_base3mf.setItemIcon(i, icon)
+            except Exception:
+                pass
+        if pending_icons:
+            QtCore.QTimer.singleShot(0, load_next_icon)
+
+    QtCore.QTimer.singleShot(0, load_next_icon)
+
     # Par défaut : le 3MF de cette sélection s'il existe ; sinon le 3MF le
     # plus récent contenant un objet du même nom (objet sorti d'un 3MF de
     # plusieurs objets, par exemple) ; sinon « Sans base »
@@ -1276,6 +1357,10 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             label = base3mf_other_labels(others + [path])[-1]
         combo_base3mf.addItem(label, path)
         combo_base3mf.setItemData(combo_base3mf.count() - 1, path, QtCore.Qt.ToolTipRole)
+        try:
+            combo_base3mf.setItemIcon(combo_base3mf.count() - 1, thumbnail_icon(path) or blank_icon)
+        except Exception:
+            pass
         combo_base3mf.setCurrentIndex(combo_base3mf.count() - 1)
         widen_base3mf_popup()
 
@@ -2107,6 +2192,7 @@ def cached_mesh_cost_model(selection):
 
 
 def _format_duration(seconds):
+    seconds = max(seconds, 1.0)   # « ~0 s » n'aurait pas de sens
     if seconds < 90:
         return tr("unit_seconds").format(n=int(round(seconds)))
     if seconds < 90 * 60:
