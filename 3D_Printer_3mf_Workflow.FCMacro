@@ -34,7 +34,7 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/11/25 09:20"  # YYYY/MM/DD
+__Date__ = "2026/11/25 10:08"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
 __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
@@ -1185,6 +1185,170 @@ def base3mf_other_labels(paths):
 
 
 # Affiche une boîte de dialogue pour demander les options d’export à l’utilisateur
+PREVIEW_WIDTH, PREVIEW_HEIGHT = 180, 130
+PREVIEW_MAX_TRIANGLES = 30_000
+
+
+PREVIEW_DEFAULT_COLOR = (0.8, 0.8, 0.8)
+
+
+def _rgb(c):
+    """(r, g, b) entre 0 et 1, depuis un tuple de flottants ou d'entiers 0..255."""
+    r, g, b = float(c[0]), float(c[1]), float(c[2])
+    if max(r, g, b) > 1.0:
+        r, g, b = r / 255.0, g / 255.0, b / 255.0
+    return (r, g, b)
+
+
+def _face_colors(obj, n_faces):
+    """
+    Couleur d'affichage de chaque face de l'objet dans FreeCAD.
+    FreeCAD 1.x : apparence (ShapeAppearance, un matériau pour tout l'objet ou
+    un par face) ; versions précédentes : DiffuseColor (par face) ou
+    ShapeColor. Gris si rien n'est lisible (pas d'interface, par exemple).
+    """
+    def read_colors(o):
+        vo = getattr(o, "ViewObject", None)
+        if vo is None:
+            return []
+        for read in (lambda: [m.DiffuseColor for m in vo.ShapeAppearance],
+                     lambda: list(vo.DiffuseColor),
+                     lambda: [vo.ShapeColor]):
+            try:
+                colors = [_rgb(c) for c in read()]
+            except Exception:
+                colors = []
+            if colors:
+                return colors
+        return []
+
+    colors = []
+    for source in _color_sources(obj):
+        colors = read_colors(source)
+        if colors:
+            break
+    if len(colors) == n_faces:
+        return colors
+    return [colors[0] if colors else PREVIEW_DEFAULT_COLOR] * n_faces
+
+
+def _color_sources(obj):
+    """
+    Objets dont on lit la couleur, dans l'ordre. Pour un Body PartDesign, ce
+    qu'on voit dans la vue 3D est sa fonction visible (en général le Tip),
+    avec sa propre couleur : le Body garde souvent la couleur par défaut.
+    """
+    sources = []
+    try:
+        if obj.isDerivedFrom("PartDesign::Body"):
+            for f in getattr(obj, "Group", []):
+                try:
+                    if (f.isDerivedFrom("PartDesign::Feature") and f.ViewObject is not None
+                            and f.ViewObject.Visibility):
+                        sources.append(f)
+                except Exception:
+                    pass
+            tip = getattr(obj, "Tip", None)
+            if tip is not None and tip not in sources:
+                sources.append(tip)
+    except Exception:
+        pass
+    sources.append(obj)
+    return sources
+
+
+def render_selection_preview(selection, width=PREVIEW_WIDTH, height=PREVIEW_HEIGHT):
+    """
+    Image des objets sélectionnés en vue isométrique (comme la vue
+    « Isométrique » de FreeCAD), dessinée sans OpenGL : maillage très grossier
+    de chaque objet, projeté, triangles éclairés selon leur orientation et
+    dessinés du plus loin au plus proche. Ne touche ni au document ni à la vue 3D.
+    Retourne un QPixmap, ou None si le dessin échoue.
+    """
+    try:
+        shapes = []
+        for obj in selection:
+            shape = global_shape(obj)
+            shapes.append((shape, _face_colors(obj, len(shape.Faces))))
+        diag = 0.0
+        for shape, _ in shapes:
+            diag = max(diag, shape.BoundBox.DiagonalLength)
+        if diag <= 0:
+            return None
+
+        # Repère de la caméra : regarde depuis l'avant-droite-haut (x, -y, z)
+        def norm(v):
+            n = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2) or 1.0
+            return (v[0] / n, v[1] / n, v[2] / n)
+
+        def cross(a, b):
+            return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+        def dot(a, b):
+            return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+        eye = norm((1.0, -1.0, 1.0))                 # vers la caméra
+        right = norm(cross((0.0, 0.0, 1.0), eye))
+        up = cross(eye, right)
+        light = norm((0.4, -0.8, 1.0))               # lumière un peu à gauche et en haut
+
+        triangles = []                               # (profondeur, points 2D, couleur)
+        budget = PREVIEW_MAX_TRIANGLES
+        linear = max(diag / 150.0, 0.01)
+        for shape, colors in shapes:
+            # Face par face, pour garder la couleur de chacune
+            for face, color in zip(shape.Faces, colors):
+                mesh = MeshPart.meshFromShape(Shape=face, LinearDeflection=linear,
+                                              AngularDeflection=0.5, Relative=False)
+                points, facets = mesh.Topology
+                pts = [(p.x, p.y, p.z) for p in points]
+                proj = [(dot(p, right), dot(p, up), dot(p, eye)) for p in pts]
+                for a, b, c in facets:
+                    pa, pb, pc = pts[a], pts[b], pts[c]
+                    n = norm(cross((pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]),
+                                   (pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2])))
+                    if dot(n, eye) < 0:
+                        n = (-n[0], -n[1], -n[2])    # face vue de l'intérieur : on l'éclaire quand même
+                    shade = 0.35 + 0.65 * max(0.0, dot(n, light))
+                    depth = (proj[a][2] + proj[b][2] + proj[c][2]) / 3.0
+                    triangles.append((depth, (proj[a][:2], proj[b][:2], proj[c][:2]),
+                                      (color[0] * shade, color[1] * shade, color[2] * shade)))
+                budget -= len(facets)
+                if budget <= 0:
+                    break
+            if budget <= 0:
+                break
+        if not triangles:
+            return None
+
+        xs = [q[0] for _, tri, _ in triangles for q in tri]
+        ys = [q[1] for _, tri, _ in triangles for q in tri]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        margin = 6
+        scale = min((width - 2 * margin) / max(x1 - x0, 1e-9),
+                    (height - 2 * margin) / max(y1 - y0, 1e-9))
+        ox = (width - (x1 - x0) * scale) / 2.0
+        oy = (height - (y1 - y0) * scale) / 2.0
+
+        pixmap = QtGui.QPixmap(width, height)
+        pixmap.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        triangles.sort(key=lambda t: t[0])           # du plus loin au plus proche
+        for _, tri, (r, g, b) in triangles:
+            qc = QtGui.QColor.fromRgbF(min(r, 1.0), min(g, 1.0), min(b, 1.0))
+            painter.setPen(QtGui.QPen(qc, 0.6))
+            painter.setBrush(qc)
+            painter.drawPolygon(QtGui.QPolygonF([
+                QtCore.QPointF(ox + (x - x0) * scale, height - (oy + (y - y0) * scale))
+                for x, y in tri]))
+        painter.end()
+        return pixmap
+    except Exception as e:
+        if DEBUG: print("⚠️ Aperçu de la sélection impossible :", e)
+        return None
+
+
 def ask_user_options(current_slicer, current_linear, current_angular, ignore_transform_pref,
                      default_fc_3mf, recent_base3mf=(), selected_names=(), selection=()):
     """Affiche boîte de dialogue pour options export (positions, params, STL, slicer, deflection)."""
@@ -1203,15 +1367,28 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     chk_reset = QtGui.QCheckBox(tr("reset_all"))
     chk_reset.setToolTip(tr("hint_reset_all"))
     chk_reset.setChecked(False)
-    layout.addWidget(chk_reset)
-    layout.addWidget(chk_stl)
+
+    # Haut de la fenêtre : cases à gauche, aperçu des objets sélectionnés à droite
+    h_top = QtGui.QHBoxLayout()
+    v_top_left = QtGui.QVBoxLayout()
+    h_top.addLayout(v_top_left, stretch=1)
+    lbl_preview = QtGui.QLabel()
+    lbl_preview.setFixedSize(PREVIEW_WIDTH, PREVIEW_HEIGHT)
+    lbl_preview.setAlignment(QtCore.Qt.AlignCenter)
+    lbl_preview.setToolTip(", ".join(selected_names))
+    h_top.addWidget(lbl_preview, 0, QtCore.Qt.AlignTop | QtCore.Qt.AlignRight)
+    layout.addLayout(h_top)
+
+    v_top_left.addWidget(chk_reset)
+    v_top_left.addWidget(chk_stl)
 
     # Nouvelle case : ignorer la position/rotation du slicer
     chk_ignore_transform = QtGui.QCheckBox(tr("ignore_transform"))
     chk_ignore_transform.setToolTip(tr("hint_ignore_transform"))
 
     chk_ignore_transform.setChecked(ignore_transform_pref)
-    layout.addWidget(chk_ignore_transform)
+    v_top_left.addWidget(chk_ignore_transform)
+    v_top_left.addStretch()
 
     # Ligne combinée : case "Lancer le slicer" + champ chemin
     h_slicer = QtGui.QHBoxLayout()
@@ -1513,7 +1690,13 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
     spin_lin.valueChanged.connect(update_estimate)
     spin_ang.valueChanged.connect(update_estimate)
     btn_optimize.clicked.connect(optimize)
+    def build_preview():
+        pixmap = render_selection_preview(selection)
+        if pixmap is not None:
+            lbl_preview.setPixmap(pixmap)
+
     if selection:
+        QtCore.QTimer.singleShot(0, build_preview)
         QtCore.QTimer.singleShot(0, build_estimate)
 
     # Cases pour les commandes externes

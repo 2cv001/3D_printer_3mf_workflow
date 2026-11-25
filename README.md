@@ -30,6 +30,12 @@ Select one or more objects (Ctrl+click in the tree) and run the macro. All the
 selected objects go into a single 3MF, each one as a separate object in the
 slicer, with its own print settings.
 
+The top right corner of the options window shows a small isometric image of the
+selected objects, with their colors (for a PartDesign Body, the color of its
+visible feature), so you can check what will be exported. It is drawn by the
+macro from a very coarse mesh, without OpenGL, in a few hundredths of a second;
+the document and the 3D view are not touched.
+
 - **First export**: the objects keep exactly their FreeCAD layout (X, Y and Z).
   The group is centered on the plate and the lowest object rests on it.
   If objects overlap, QIDISlicer / PrusaSlicer ask whether to load them as a
