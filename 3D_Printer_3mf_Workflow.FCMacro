@@ -34,7 +34,7 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/11/25 07:48"  # YYYY/MM/DD
+__Date__ = "2026/11/25 07:59"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
 __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
@@ -210,7 +210,7 @@ TRANSLATIONS = {
         "error_no_save": "❌ Le projet n'a pas encore été sauvegardé.",
         "warn_no_selection": "⚠️ Aucun objet sélectionné.",
         "warn_losses": "⚠️ En remplaçant les maillages, ces éléments du projet du slicer seront perdus :\n\n{details}\n\nContinuer ? (Annuler laisse le 3MF tel quel.)",
-        "loss_paint": "peinture ou propriétés de faces (supports, couture, couleurs...)",
+        "loss_paint": "réglages appliqués sur les faces (supports, couture, couleurs...)",
         "loss_parts": "modificateurs ou pièces ajoutées dans le slicer",
         "btn_continue": "Continuer",
         "error_write_ini": "❌ Écriture impossible sur le fichier ini :",
@@ -328,7 +328,7 @@ TRANSLATIONS = {
         "error_no_save": "❌ The project has not been saved yet.",
         "warn_no_selection": "⚠️ No object selected.",
         "warn_losses": "⚠️ Replacing the meshes will lose these items of the slicer project:\n\n{details}\n\nContinue? (Cancel leaves the 3MF unchanged.)",
-        "loss_paint": "painting or face properties (supports, seam, colors...)",
+        "loss_paint": "settings applied to faces (supports, seam, colors...)",
         "loss_parts": "modifiers or parts added in the slicer",
         "btn_continue": "Continue",
         "error_write_ini": "❌ Unable to write to the ini file:",
@@ -448,7 +448,7 @@ TRANSLATIONS = {
         "error_no_save": "❌ Das Projekt wurde noch nicht gespeichert.",
         "warn_no_selection": "⚠️ Kein Objekt ist ausgewählt.",
         "warn_losses": "⚠️ Beim Ersetzen der Netze gehen diese Elemente des Slicer-Projekts verloren:\n\n{details}\n\nFortfahren? (Abbrechen lässt die 3MF Datei unverändert.)",
-        "loss_paint": "Bemalung oder Flächeneigenschaften (Stützen, Naht, Farben...)",
+        "loss_paint": "auf Flächen angewendete Einstellungen (Stützen, Naht, Farben...)",
         "loss_parts": "Modifikatoren oder im Slicer hinzugefügte Teile",
         "btn_continue": "Fortfahren",
         "error_write_ini": "❌ Die ini Datei konnte nicht beschrieben werden:",

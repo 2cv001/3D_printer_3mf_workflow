@@ -83,10 +83,11 @@ supports, filament, modifiers…) are kept only for the objects matched by name.
 Objects of the base that match no selected object are removed; new objects get
 the general settings and the first filament.
 
-### Painting and modifiers
+### Settings applied to faces and modifiers
 
-Painted supports, seams and colors (and other per-face data) as well as
-modifiers and extra parts are tied to the old geometry and cannot be kept when
+Some print settings are attached to specific faces of an object: enforced or
+blocked supports, seams, colors (and other per-face data). They, as well as
+modifiers and extra parts, are tied to the old geometry and cannot be kept when
 it changes. If some would be lost, the macro tells you which objects are
 concerned and asks you to **Continue** or **Cancel** (the 3MF is then left
 unchanged).
