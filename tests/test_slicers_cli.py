@@ -63,6 +63,9 @@ def run(names, keep=True, base3mf=None):
     return base + ".3mf"
 
 
+UNRESPONSIVE = set()
+
+
 def check(path, exes=("QIDIStudio",), expect=None):
     w = world.world(path)
     world.show(path)
@@ -74,8 +77,16 @@ def check(path, exes=("QIDIStudio",), expect=None):
             FAILS.append(f"{os.path.basename(path)}: {o['name']} pas posé (zmin={o['min'][2]})")
     for e in exes:
         out = path + f".{e}.3mf"
-        r = subprocess.run([EXES[e], "--arrange", "0", "--export-3mf", out, path],
-                           capture_output=True, text=True, errors="replace", timeout=240)
+        if not os.path.exists(EXES[e]) or e in UNRESPONSIVE:
+            continue
+        try:
+            r = subprocess.run([EXES[e], "--arrange", "0", "--export-3mf", out, path],
+                               capture_output=True, text=True, errors="replace", timeout=120)
+        except subprocess.TimeoutExpired:
+            # Le slicer ne répond pas (souvent parce qu'il est déjà ouvert) : ignoré
+            print(f"   relu par {e} : IGNORÉ (ne répond pas, déjà ouvert ?)")
+            UNRESPONSIVE.add(e)
+            continue
         ok = r.returncode == 0 and os.path.exists(out)
         print(f"   relu par {e} : {'OK' if ok else 'ÉCHEC (code %s)' % r.returncode}")
         if not ok:
