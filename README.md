@@ -137,6 +137,14 @@ individual contours of a sketch or solids inside a single selected object
 The macro exports the selected objects to a 3MF file using the specified tessellation parameters (LinearDeflection and AngularDeflection). 
 The meshes are computed in memory: nothing is added to the FreeCAD document.
 
+Very small values make the mesh huge, and FreeCAD is frozen while it is
+computed. Before meshing, the macro quickly estimates the number of triangles
+and the time needed (from a few coarse test meshes, in less than a second). If
+the mesh would take more than about 30 seconds or have more than a million
+triangles, it asks first: **Continue** or **Back to options** to choose
+coarser values. The estimate is approximate, but enough to spot a value that is
+much too fine.
+
 
 
 <img width="550" height="363" alt="image" src="https://github.com/user-attachments/assets/8d597779-a934-4ad4-9c66-3bbc3c463bba" />

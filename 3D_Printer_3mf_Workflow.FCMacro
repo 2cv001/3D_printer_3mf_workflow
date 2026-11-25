@@ -204,6 +204,21 @@ TRANSLATIONS = {
                                 "tous les objets auront les réglages généraux de {base}.",
         "base3mf_info_nosettings": "Ce 3MF ne contient pas de réglages de slicer : géométrie seule.",
         "base3mf_info_more": "{names} et {n} autres",
+        "heavy_mesh_title": "Maillage très fin",
+        "heavy_mesh_text": "Avec ces réglages de précision, le maillage ferait environ {tri} triangles "
+                           "(3MF d'environ {size}) et prendrait environ {time}.\n"
+                           "FreeCAD restera bloqué pendant ce temps.\n\n"
+                           "Continuer quand même ?",
+        "btn_back_options": "Revenir aux options",
+        "unit_million": "{n} millions de",
+        "unit_billion": "{n} milliards de",
+        "unit_mb": "{n} Mo",
+        "unit_gb": "{n} Go",
+        "unit_seconds": "{n} s",
+        "unit_minutes": "{n} min",
+        "unit_hours": "{n} h",
+        "unit_days": "{n} jours",
+        "decimal_point": ",",
 
         # Messages d'erreur / avertissement
         "error_no_doc": "❌ Aucun document ouvert dans FreeCAD.",
@@ -322,6 +337,21 @@ TRANSLATIONS = {
                                 "all objects will get the general settings of {base}.",
         "base3mf_info_nosettings": "This 3MF contains no slicer settings: geometry only.",
         "base3mf_info_more": "{names} and {n} more",
+        "heavy_mesh_title": "Very fine mesh",
+        "heavy_mesh_text": "With these precision settings, the mesh would have about {tri} triangles "
+                           "(3MF of about {size}) and would take about {time}.\n"
+                           "FreeCAD will be frozen meanwhile.\n\n"
+                           "Continue anyway?",
+        "btn_back_options": "Back to options",
+        "unit_million": "{n} million",
+        "unit_billion": "{n} billion",
+        "unit_mb": "{n} MB",
+        "unit_gb": "{n} GB",
+        "unit_seconds": "{n} s",
+        "unit_minutes": "{n} min",
+        "unit_hours": "{n} h",
+        "unit_days": "{n} days",
+        "decimal_point": ".",
 
         # Error / warning messages
         "error_no_doc": "❌ No document open in FreeCAD.",
@@ -442,6 +472,21 @@ TRANSLATIONS = {
                                 "alle Objekte erhalten die allgemeinen Einstellungen von {base}.",
         "base3mf_info_nosettings": "Diese 3MF enthält keine Slicer-Einstellungen: nur Geometrie.",
         "base3mf_info_more": "{names} und {n} weitere",
+        "heavy_mesh_title": "Sehr feines Netz",
+        "heavy_mesh_text": "Mit diesen Genauigkeitseinstellungen hätte das Netz etwa {tri} Dreiecke "
+                           "(3MF von etwa {size}) und würde etwa {time} dauern.\n"
+                           "FreeCAD ist währenddessen blockiert.\n\n"
+                           "Trotzdem fortfahren?",
+        "btn_back_options": "Zurück zu den Optionen",
+        "unit_million": "{n} Millionen",
+        "unit_billion": "{n} Milliarden",
+        "unit_mb": "{n} MB",
+        "unit_gb": "{n} GB",
+        "unit_seconds": "{n} s",
+        "unit_minutes": "{n} min",
+        "unit_hours": "{n} Std.",
+        "unit_days": "{n} Tage",
+        "decimal_point": ",",
 
         # Error / warning messages
         "error_no_doc": "❌ Es ist kein Dokument in FreeCAD geöffnet.",
@@ -1691,6 +1736,157 @@ def entries_contain_real_mesh(entries):
 # ------------------------------------------------------------
 # Maillage de la sélection, sans passer par un fichier
 # ------------------------------------------------------------
+def global_shape(obj):
+    """Copie de la forme de `obj`, placée dans le repère global (App::Part compris)."""
+    shape = obj.Shape.copy()
+    try:
+        # Placement des conteneurs parents (App::Part...), en plus de celui de l'objet
+        parent = obj.getGlobalPlacement().multiply(obj.Placement.inverse())
+        shape.Placement = parent.multiply(shape.Placement)
+    except Exception:
+        pass
+    return shape
+
+
+# Au-delà de ces valeurs estimées, la macro demande avant de mailler
+HEAVY_MESH_SECONDS = 30
+HEAVY_MESH_TRIANGLES = 1_000_000
+# Coût d'un triangle (maillage + 3MF) : environ 25 µs pour 30 000 triangles,
+# puis de plus en plus cher quand le maillage grossit (mesuré avec FreeCAD 1.1)
+SECONDS_PER_TRIANGLE = 25e-6
+TRIANGLES_REFERENCE = 30_000
+BYTES_PER_TRIANGLE = 80
+# Essais grossiers : réglage demandé multiplié par ces facteurs, du plus
+# grossier au plus fin, tant que l'essai suivant reste léger
+ESTIMATE_FACTORS = (256, 64, 16, 4)
+ESTIMATE_MAX_TRIAL_FACETS = 60_000
+MAX_ANGULAR_DEFLECTION = 1.0   # radians
+
+
+def _count_facets(shape, linear, angular):
+    m = MeshPart.meshFromShape(Shape=shape, LinearDeflection=float(linear),
+                               AngularDeflection=float(angular), Relative=False)
+    return max(m.CountFacets, 1)
+
+
+def _extrapolate(shape, target, mesh_args, cap=None):
+    """
+    Nombre de triangles au réglage `target`, prolongé à partir de maillages
+    d'essai où seul ce réglage varie (`mesh_args(valeur)` donne les deux
+    réglages de l'essai). Le nombre de triangles suit à peu près une
+    puissance du réglage ; la loi est prise sur les deux essais les plus fins.
+    Un essai n'est lancé que si sa taille prévue reste raisonnable.
+    """
+    values = []
+    for k in ESTIMATE_FACTORS:
+        v = target * k if cap is None else min(target * k, cap)
+        if not values or v < values[-1]:
+            values.append(v)
+    if len(values) == 1:
+        # Réglage déjà grossier : l'essai au réglage demandé est léger
+        return _count_facets(shape, *mesh_args(target))
+
+    trials = []
+    for v in values:
+        if trials:
+            (v_last, n_last) = trials[-1]
+            power = 2.0
+            if len(trials) >= 2:
+                (v0, n0) = trials[-2]
+                power = min(max(math.log(n_last / n0) / math.log(v0 / v_last), 0.0), 2.5)
+            if n_last * (v_last / v) ** power > ESTIMATE_MAX_TRIAL_FACETS:
+                break
+        t0 = time.perf_counter()
+        trials.append((v, _count_facets(shape, *mesh_args(v))))
+        if time.perf_counter() - t0 > 1.0:
+            break   # déjà lourd : on s'arrête là
+    (v_last, n_last) = trials[-1]
+    if len(trials) >= 2:
+        (v0, n0) = trials[-2]
+        power = min(max(math.log(n_last / n0) / math.log(v0 / v_last), 0.0), 2.5)
+    else:
+        power = 2.0   # prudent
+    return n_last * (v_last / target) ** power
+
+
+def estimate_mesh_cost(selection, linear_deflection, angular_deflection):
+    """
+    Estime, avant le vrai maillage, le nombre de triangles et la durée.
+    Le nombre de triangles dépend de deux réglages, chacun pouvant être celui
+    qui limite : la précision et la tolérance angulaire. Pour chacun, des
+    maillages d'essai plus grossiers (l'autre réglage rendu sans effet)
+    donnent sa loi, prolongée jusqu'au réglage demandé ; on garde le plus
+    grand des deux. Rapide et approximatif : sert seulement à repérer un
+    réglage beaucoup trop fin.
+    Retourne (triangles, secondes) ; (0, 0) si l'estimation échoue.
+    """
+    d, a = float(linear_deflection), float(angular_deflection)
+    total = 0.0
+    try:
+        for obj in selection:
+            shape = global_shape(obj)
+            diag = max(shape.BoundBox.DiagonalLength, 1e-6)
+            # Effet de la précision seule (tolérance angulaire sans effet)
+            n_lin = _extrapolate(shape, d, lambda v: (v, MAX_ANGULAR_DEFLECTION))
+            # Effet de la tolérance angulaire seule (précision grossière)
+            coarse = max(d, diag / 200)
+            n_ang = _extrapolate(shape, a, lambda v: (coarse, v), cap=MAX_ANGULAR_DEFLECTION)
+            total += max(n_lin, n_ang)
+    except Exception as e:
+        if DEBUG: print("⚠️ Estimation du maillage impossible :", e)
+        return 0, 0
+    seconds = total * SECONDS_PER_TRIANGLE * max(1.0, math.sqrt(total / TRIANGLES_REFERENCE))
+    return int(total), seconds
+
+
+def _format_duration(seconds):
+    if seconds < 90:
+        return tr("unit_seconds").format(n=int(round(seconds)))
+    if seconds < 90 * 60:
+        return tr("unit_minutes").format(n=int(round(seconds / 60)))
+    if seconds < 48 * 3600:
+        return tr("unit_hours").format(n=int(round(seconds / 3600)))
+    return tr("unit_days").format(n=int(seconds // 86400))
+
+
+def _format_decimal(value):
+    text = f"{value:.1f}".rstrip("0").rstrip(".")
+    return text.replace(".", tr("decimal_point"))
+
+
+def _format_triangles(n):
+    if n >= 1_000_000_000:
+        return tr("unit_billion").format(n=_format_decimal(n / 1e9))
+    if n >= 1_000_000:
+        return tr("unit_million").format(n=_format_decimal(n / 1e6))
+    return f"{n:,}".replace(",", " ")
+
+
+def _format_size(n_bytes):
+    if n_bytes >= 1e9:
+        return tr("unit_gb").format(n=_format_decimal(n_bytes / 1e9))
+    return tr("unit_mb").format(n=max(1, int(round(n_bytes / 1e6))))
+
+
+def ask_heavy_mesh_dialog(n_triangles, seconds):
+    """
+    Prévient qu'un maillage très fin sera long. Retourne True pour
+    continuer, False pour revenir aux options.
+    """
+    box = QtGui.QMessageBox()
+    box.setIcon(QtGui.QMessageBox.Warning)
+    box.setWindowTitle(tr("heavy_mesh_title"))
+    box.setText(tr("heavy_mesh_text").format(
+        tri=_format_triangles(n_triangles),
+        size=_format_size(n_triangles * BYTES_PER_TRIANGLE),
+        time=_format_duration(seconds)))
+    btn_continue = box.addButton(tr("btn_continue"), QtGui.QMessageBox.AcceptRole)
+    btn_back = box.addButton(tr("btn_back_options"), QtGui.QMessageBox.RejectRole)
+    box.setDefaultButton(btn_back)
+    box.exec()
+    return box.clickedButton() == btn_continue
+
+
 def mesh_selection(selection, names,
                    linear_deflection=DEFAULT_LINEAR_DEFLECTION,
                    angular_deflection=DEFAULT_ANGULAR_DEFLECTION):
@@ -1709,13 +1905,7 @@ def mesh_selection(selection, names,
     parts = []
     merged = Mesh.Mesh()
     for obj, name in zip(selection, names):
-        shape = obj.Shape.copy()
-        try:
-            # Placement des conteneurs parents (App::Part...), en plus de celui de l'objet
-            parent = obj.getGlobalPlacement().multiply(obj.Placement.inverse())
-            shape.Placement = parent.multiply(shape.Placement)
-        except Exception:
-            pass
+        shape = global_shape(obj)
         mesh = MeshPart.meshFromShape(
             Shape=shape,
             LinearDeflection=float(linear_deflection),
@@ -3102,6 +3292,15 @@ def export_replace_geometry():
 
         show_message(tr("reset_title"), tr("reset_message"))
         return "restart"
+
+    # Maillage très fin : on prévient avant de bloquer FreeCAD longtemps.
+    # « Revenir aux options » rouvre la fenêtre (rien n'a encore été écrit).
+    est_triangles, est_seconds = estimate_mesh_cost(selection, linear_value, angular_value)
+    if DEBUG:
+        print(f"Estimation du maillage : {est_triangles} triangles, {est_seconds:.1f} s")
+    if est_triangles > HEAVY_MESH_TRIANGLES or est_seconds > HEAVY_MESH_SECONDS:
+        if not ask_heavy_mesh_dialog(est_triangles, est_seconds):
+            return "restart"
 
     # ------------------------------------------------------------
     # 3) Si l’utilisateur a choisi un 3MF de base, on le copie sur fc_3mf
