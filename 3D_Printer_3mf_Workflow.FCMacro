@@ -34,7 +34,7 @@ __Name__ = "3D_Printer_3mf_workflow"
 __Comment__ = "FreeCAD macro exporting smooth 3MF files and preserving all slicer print settings, with automatic workflow to your preferred slicer."
 __Author__ = "2cv001"
 __Title__ = "Macro 3D Printer 3mf workflow"
-__Date__ = "2026/11/25 17:38"  # YYYY/MM/DD
+__Date__ = "2026/11/25 18:54"  # YYYY/MM/DD
 __Version__ = __Date__
 __Icon__ = "https://wiki.freecad.org/images/3/32/Macro_3D_Printer_3mf_Workflow.png"
 __Wiki__ = "https://wiki.freecad.org/Macro_3D_Printer_3mf_Workflow"
@@ -247,8 +247,9 @@ TRANSLATIONS = {
                         "• Enregistrer : enregistre le document, puis continue.\n"
                         "• Dossier temporaire : continue sans enregistrer ; le 3MF est créé dans\n"
                         "   {folder}\n"
-                        "   Il est effacé à la fermeture de FreeCAD. Si vous enregistrez le document puis\n"
-                        "   relancez la macro, le 3MF (avec vos réglages du slicer) est récupéré à côté du fichier.",
+                        "\nPour conserver ce 3MF : enregistrez le document, puis relancez la macro avant de "
+                        "fermer FreeCAD. Le 3MF, avec vos réglages du slicer, sera alors placé à côté du fichier. "
+                        "Sinon, il est effacé à la fermeture de FreeCAD.",
         "temp_recovered": "3MF récupérés du dossier temporaire, à côté du fichier FreeCAD :\n{names}",
         "temp_backed_up": "Les anciens fichiers du même nom sont gardés en sauvegarde :\n{names}",
         "temp_conflict_title": "Conflit de noms",
@@ -261,7 +262,9 @@ TRANSLATIONS = {
                               "puis relancez la macro avant de fermer FreeCAD.",
         "btn_replace_old": "Remplacer l'ancien",
         "btn_keep_old": "Garder l'ancien",
-        "unsaved_again_text": "Vous travaillez dans un dossier temporaire (document non enregistré).",
+        "unsaved_again_text": "Vous travaillez dans un dossier temporaire (document non enregistré).\n"
+                              "Pour conserver le 3MF : enregistrez le document, puis relancez la macro "
+                              "avant de fermer FreeCAD.",
         "btn_continue_temp": "Continuer en temporaire",
         "btn_save": "Enregistrer",
         "btn_temp_folder": "Dossier temporaire",
@@ -425,8 +428,9 @@ TRANSLATIONS = {
                         "• Save: saves the document, then continues.\n"
                         "• Temporary folder: continues without saving; the 3MF is created in\n"
                         "   {folder}\n"
-                        "   It is deleted when FreeCAD closes. If you save the document and run the\n"
-                        "   macro again, the 3MF (with your slicer settings) is moved next to the file.",
+                        "\nTo keep this 3MF: save the document, then run the macro again before closing "
+                        "FreeCAD. The 3MF, with your slicer settings, will then be placed next to the file. "
+                        "Otherwise, it is deleted when FreeCAD closes.",
         "temp_recovered": "3MF recovered from the temporary folder, next to the FreeCAD file:\n{names}",
         "temp_backed_up": "The older files with the same name are kept as backups:\n{names}",
         "temp_conflict_title": "Name conflict",
@@ -439,7 +443,9 @@ TRANSLATIONS = {
                               "then run the macro again before closing FreeCAD.",
         "btn_replace_old": "Replace the old one",
         "btn_keep_old": "Keep the old one",
-        "unsaved_again_text": "You are working in a temporary folder (document not saved).",
+        "unsaved_again_text": "You are working in a temporary folder (document not saved).\n"
+                              "To keep the 3MF: save the document, then run the macro again "
+                              "before closing FreeCAD.",
         "btn_continue_temp": "Continue in temporary folder",
         "btn_save": "Save",
         "btn_temp_folder": "Temporary folder",
@@ -605,8 +611,9 @@ TRANSLATIONS = {
                         "• Speichern: speichert das Dokument und fährt fort.\n"
                         "• Temporärer Ordner: fährt ohne Speichern fort; die 3MF wird erstellt in\n"
                         "   {folder}\n"
-                        "   Er wird beim Schließen von FreeCAD gelöscht. Wenn Sie das Dokument speichern und\n"
-                        "   das Makro erneut starten, wird die 3MF (mit den Slicer-Einstellungen) neben die Datei verschoben.",
+                        "\nUm diese 3MF zu behalten: speichern Sie das Dokument und starten Sie das Makro vor dem "
+                        "Schließen von FreeCAD erneut. Die 3MF wird dann mit den Slicer-Einstellungen neben die "
+                        "Datei gelegt. Andernfalls wird sie beim Schließen von FreeCAD gelöscht.",
         "temp_recovered": "3MF aus dem temporären Ordner neben die FreeCAD-Datei verschoben:\n{names}",
         "temp_backed_up": "Ältere Dateien mit gleichem Namen werden als Sicherung behalten:\n{names}",
         "temp_conflict_title": "Namenskonflikt",
@@ -619,7 +626,9 @@ TRANSLATIONS = {
                               "und starten Sie das Makro vor dem Schließen von FreeCAD erneut.",
         "btn_replace_old": "Alte ersetzen",
         "btn_keep_old": "Alte behalten",
-        "unsaved_again_text": "Sie arbeiten in einem temporären Ordner (Dokument nicht gespeichert).",
+        "unsaved_again_text": "Sie arbeiten in einem temporären Ordner (Dokument nicht gespeichert).\n"
+                              "Um die 3MF zu behalten: Dokument speichern und das Makro vor dem "
+                              "Schließen von FreeCAD erneut starten.",
         "btn_continue_temp": "Im temporären Ordner fortfahren",
         "btn_save": "Speichern",
         "btn_temp_folder": "Temporärer Ordner",
