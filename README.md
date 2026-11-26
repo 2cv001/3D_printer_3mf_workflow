@@ -18,6 +18,7 @@ This macro automates and enhances the 3D printing workflow from FreeCAD to your 
 - **Your slicer settings are kept**: set them once in the slicer (temperature, supports, infill…); every new export from FreeCAD keeps them.
 - **From FreeCAD to the slicer in one click**: the macro exports the 3MF and opens it in your slicer.
 - **Several objects at once**, each one with its own settings.
+- **Your own commands before or after the export**: turn on the printer through a smart plug while FreeCAD exports, preheat, copy the 3MF… Ready-made templates, a live check and a Test button help to write them.
 - **You see what you export**: a preview of the selected objects and the estimated export time.
 - **Works with most slicers**: QIDISlicer, QIDIStudio, PrusaSlicer, OrcaSlicer, Bambu Studio, Cura, Creality Print, Anycubic.
 
@@ -73,35 +74,65 @@ The 3MF is created next to the FreeCAD file. If the document has never been save
 
 ## Launching other programs or commands
 
-The macro allows you to define custom commands that will be executed automatically after the 3MF file is generated. This feature is optional and can be used to automate additional steps in your workflow, such as:
+The macro can run your own commands automatically, before or after the export. This feature is optional and can be used to automate additional steps in your workflow, such as:
 
-- copying the generated 3MF file to another location
-- turning on your 3D printer through a smart plug
-- turning a light on
+- turning on your 3D printer through a smart plug (Shelly, Home Assistant, Jeedom…) while FreeCAD exports
 - pre‑heating the build plate
+- turning a light on
+- copying the generated 3MF file to another location
 - sending an HTTP request to your home automation system
 - launching a script or external tool
+
+The options window lists your commands, each with a checkbox: check the ones to run this time. Commands run before the export are marked "(before the export)".
 
 ### Setup (optional: to add additional commands)
 
 A dedicated helper macro is provided to make configuration easy. Your commands are stored in an .ini file used by the workflow.
 
-The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro).
+The ⚙️ button in the options window allows you to both install and open the configuration macro (3D_Printer_3mf_Workflow_ConfigIni.FCMacro). The list of commands in the options window is updated as soon as you close it.
 
 <img width="1134" height="805" alt="image" src="https://github.com/user-attachments/assets/86b85935-095a-40db-98c6-453d60be281e" />
 
-
-
-- Fill in the fields in the configuration window.
-- Hover your mouse over a column title to display help tooltips.
-- **Add from a template** creates a ready-made command (copy the 3MF, open the project folder, web request, Shelly plug — local, with password or through the Shelly cloud with an API key —, Home Assistant, Jeedom, Klipper preheating, Python script); the part to replace, such as `<PLUG_IP>`, is selected: just type.
-- Under the table, the command of the selected row can be edited with **Browse…** (inserts the path of a program or file) and **Insert a variable** (`%EXPORT%.3mf`…). A check shows whether the program is found, how the command is split into parameters (with the real paths of the export), and the usual mistakes (command built into Windows such as `copy`, part left to replace, unclosed quote…).
-- **Test** runs the command right away (after confirmation) and tells whether it succeeded.
-- Each command you define will be executed in order after the 3MF file is produced (before the end message), or, if **Before the export** is checked, as soon as the options are validated, before the meshing (to turn on the printer or preheat; the 3MF is not written yet then). The delay of a command counts from the previous command. For "after" commands, FreeCAD is not blocked while waiting; for "before" commands, the macro waits for each delay (countdown in the status bar) and the export only starts after the last one.
-- Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
-- Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them.
-
 <img width="897" height="528" alt="Configuration window" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
+
+Each row of the table is a command:
+
+| Column | Meaning |
+|--------|---------|
+| Command | The program and its parameters |
+| Label | The name shown in the options window |
+| Delay (s) | Time to wait after the previous command |
+| Enabled by default | Checked in the options window when the macro starts |
+| Before the export | Run the command before the export instead of after it |
+
+Hover your mouse over a column title to display help tooltips.
+
+#### Writing a command
+
+- **Add from a template** (first button) creates a ready-made command: copy the 3MF, open the project folder, web request, Shelly plug (Gen 1 or Gen 2, with or without a password, or through the Shelly cloud with an API key), Home Assistant, Jeedom, Klipper preheating, Python script. The part to replace, such as `<PLUG_IP>`, is selected: just type. Requests made with `curl` use `--fail`, so that an error answered by the device is reported as an error.
+- **Add from scratch** adds an empty row.
+- Under the table, the command of the selected row can be edited with:
+  - **Browse…**: inserts the path of a program or file;
+  - **Insert a variable**: inserts `%EXPORT%.3mf`, `%PROJECTDIR%`… (see below), with the quotes and the space when needed.
+- A **check**, updated as you type, shows:
+  - whether the program is found, and where;
+  - how the command is split into parameters, with the real paths of the current export;
+  - the usual mistakes: command built into Windows such as `copy` without `cmd /c`, part of a template left to replace, unclosed quote, single quotes, `>` or `|`, unknown variable, `%EXPORT%` used before the export.
+- **Test** runs the command right away (after confirmation) and tells whether it succeeded. For `curl`, the usual errors are explained (device not found, not reachable, error answered, no answer in time).
+
+Rules to know:
+
+- Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
+- Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them, and `>`, `|` or `&&` do not work.
+
+#### Before or after the export
+
+- **After the export** (default): the commands run in order once the 3MF is written and the slicer launched, before the end message. FreeCAD is not blocked while a delay runs.
+- **Before the export** checked: the command runs as soon as the options are validated, before the meshing. Typical use: turn on the printer and start preheating while FreeCAD exports. The macro waits for each delay (countdown in the status bar) and the export only starts after the last "before" command. The 3MF is not written yet at that time: do not use `%EXPORT%` in these commands.
+
+Example: a "before" command turns on the Shelly plug, a second "before" command with a 10 s delay sends the preheating to Klipper once the printer has started, then the export begins.
+
+The "before" commands are stored separately in the .ini file (`EXTRA_COMMANDS_BEFORE`): an older version of the macro ignores them.
 
 ### Using project and export placeholders in user commands
 
@@ -116,6 +147,8 @@ Custom post-processing commands can refer to both the FreeCAD project and the ex
 | `%EXPORTNAME%` | Export file name without extension |
 
 ### Examples
+
+These examples are also available with **Add from a template**. Replace the parts between `< >` with your own values.
 
 Copy the generated 3MF file into a `backup` folder of the project (Windows; the folder must exist):
 
@@ -135,35 +168,69 @@ Run a script stored in the project folder:
 python "%PROJECTDIR%/scripts/postprocess.py" "%EXPORT%.3mf"
 ```
 
+Open the project folder (Windows):
+
+```bash
+explorer "%PROJECTDIR%"
+```
+
 Send an HTTP request using the project name:
 
 ```bash
-curl "http://myserver/api/start?job=%PROJECTNAME%"
+curl --fail "http://<SERVER_ADDRESS>/api?job=%PROJECTNAME%"
 ```
 
-Turn on a Shelly smart plug Gen 1:
+#### Turning on the printer (to check "Before the export")
+
+Shelly smart plug Gen 1:
 
 ```bash
-curl "http://192.168.xxx.xxx/relay/0?turn=on"
+curl --fail "http://<PLUG_IP>/relay/0?turn=on"
 ```
 
 Gen 1 with a password (restricted login):
 
 ```bash
-curl -u <USER>:<PASSWORD> "http://192.168.xxx.xxx/relay/0?turn=on"
+curl --fail -u <USER>:<PASSWORD> "http://<PLUG_IP>/relay/0?turn=on"
 ```
 
 Gen 2:
 
 ```bash
-curl "http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true"
+curl --fail "http://<PLUG_IP>/rpc/Switch.Set?id=0&on=true"
 ```
 
-Or if your device has a password:
+Gen 2 with a password (the user is always `admin`; `--anyauth` lets curl use the digest authentication asked by the plug):
 
 ```bash
-curl --anyauth -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
+curl --fail --anyauth -u admin:<PASSWORD> "http://<PLUG_IP>/rpc/Switch.Set?id=0&on=true"
 ```
+
+Through the Shelly cloud (server address and authorization key in the Shelly app: User settings → Authorization cloud key; device ID in the device settings):
+
+```bash
+curl --fail -X POST "https://<CLOUD_SERVER>/device/relay/control" -d "channel=0&turn=on&id=<DEVICE_ID>&auth_key=<API_KEY>"
+```
+
+Home Assistant (long-lived access token created in your Home Assistant profile):
+
+```bash
+curl --fail -X POST -H "Authorization: Bearer <TOKEN>" -H "Content-Type: application/json" -d "{\"entity_id\":\"switch.<PLUG_NAME>\"}" "http://<HOME_ASSISTANT_ADDRESS>:8123/api/services/switch/turn_on"
+```
+
+Jeedom (API key in Settings → System → Configuration → API; command ID shown in the advanced configuration of the command):
+
+```bash
+curl --fail "http://<JEEDOM_ADDRESS>/core/api/jeeApi.php?apikey=<API_KEY>&type=cmd&id=<COMMAND_ID>"
+```
+
+Preheat the bed of a Klipper printer to 60 °C (Moonraker):
+
+```bash
+curl --fail -X POST "http://<PRINTER_IP>:7125/printer/gcode/script?script=M140%20S60"
+```
+
+Keep your keys and passwords for yourself: they are stored in clear text in the .ini file.
 
 ## Going further
 
