@@ -101,7 +101,9 @@ The ⚙️ button in the options window allows you to both install and open the 
 - Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
 - Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them.
 
-<img width="897" height="528" alt="Configuration window" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
+<img width="896" height="681" alt="image" src="https://github.com/user-attachments/assets/63e9cb87-4f19-40c4-bb60-8ba5dae6529f" />
+
+
 
 ### Using project and export placeholders in user commands
 
