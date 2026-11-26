@@ -1083,9 +1083,10 @@ def reload_extra_commands():
 
 reload_extra_commands()
 
-def run_macro_if_exists(filename, download_url, raw_url):
+def run_macro_if_exists(filename, download_url, raw_url, extra_globals=None):
     """
     Utilise le dictionnaire global `tr` pour les libellés.
+    extra_globals : noms ajoutés à l'espace de noms de la macro exécutée.
     """
 
     current_dir = os.path.dirname(__file__)
@@ -1097,7 +1098,9 @@ def run_macro_if_exists(filename, download_url, raw_url):
     def execute_macro(path):
         with open(path, "r", encoding="utf-8") as f:
             code = f.read()
-        exec(compile(code, path, "exec"), {"__file__": path, "__name__": "__main__"})
+        namespace = dict(extra_globals or {})
+        namespace.update({"__file__": path, "__name__": "__main__"})
+        exec(compile(code, path, "exec"), namespace)
 
     # --- 2) Si la macro existe → exécution immédiate ---
     if os.path.isfile(macro_path):
@@ -2125,11 +2128,22 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
 
 
     def install_config_macro():
+        # Vrais chemins du projet et de l'export : aperçu et test des commandes
+        context = {}
+        try:
+            doc = selection[0].Document if selection else FreeCAD.ActiveDocument
+            if doc is not None:
+                context["PROJECT"] = os.path.splitext(project_path(doc))[0]
+        except Exception:
+            pass
+        if default_fc_3mf:
+            context["EXPORT"] = os.path.splitext(default_fc_3mf)[0]
         try:
             run_macro_if_exists(
                 "3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
                 "https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
-                "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro"
+                "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+                {"CFGINI_CONTEXT": context},
             )
         except Exception as e:
             show_message(tr("error_title"), str(e))
@@ -4383,6 +4397,10 @@ def run_extra_commands(extra_cmds, project_path, export_basepath):
     if DEBUG:
         print('Lancement commandes utilisateur')
 
+    # Chemins au format du système : FreeCAD donne « D:/… » sous Windows, que
+    # l'Explorateur ne comprend pas (il ouvre « Documents ») et où cmd prend /… pour une option
+    project_path = os.path.normpath(project_path)
+    export_basepath = os.path.normpath(export_basepath)
     # On enlève l’extension pour obtenir la base
     project_basepath = os.path.splitext(project_path)[0]
     # Dossier du projet

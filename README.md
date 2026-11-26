@@ -94,6 +94,9 @@ The ⚙️ button in the options window allows you to both install and open the 
 
 - Fill in the fields in the configuration window.
 - Hover your mouse over a column title to display help tooltips.
+- **Add from a template** creates a ready-made command (copy the 3MF, open the project folder, web request, Shelly plug — local, with password or through the Shelly cloud with an API key —, Home Assistant, Jeedom, Klipper preheating, Python script); the part to replace, such as `<PLUG_IP>`, is selected: just type.
+- Under the table, the command of the selected row can be edited with **Browse…** (inserts the path of a program or file) and **Insert a variable** (`%EXPORT%.3mf`…). A check shows whether the program is found, how the command is split into parameters (with the real paths of the export), and the usual mistakes (command built into Windows such as `copy`, part left to replace, unclosed quote…).
+- **Test** runs the command right away (after confirmation) and tells whether it succeeded.
 - Each command you define will be executed in order after the 3MF file is produced. The delay of a command counts from the previous command; FreeCAD is not blocked while waiting.
 - Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
 - Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them.
@@ -153,7 +156,7 @@ curl "http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true"
 Or if your device has a password:
 
 ```bash
-curl -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
+curl --anyauth -u admin:yourpassword "http://192.168.xxx.xx/rpc/Switch.Set?id=0&on=true"
 ```
 
 ## Going further

@@ -5,7 +5,7 @@
 #
 # Tous les noms globaux commencent par « cfgini_ » : la macro principale (anciennes
 # versions) exécute ce fichier dans son propre espace de noms, il ne faut rien y écraser.
-import os, sys, re, configparser, ast, shlex
+import os, sys, re, configparser, ast, shlex, shutil, subprocess, time, html
 from PySide import QtGui, QtCore
 try:
     import FreeCADGui
@@ -62,14 +62,14 @@ cfgini_TRANSLATIONS = {
             "Exemple avec arguments : curl https://monserveur/api --insecure<br>"
             "Exemple requête HTTP avec argument : curl -X POST https://domotique/api "
             "-d \"apikey=VOTRE_CLE&action=on\"<br>"
-            "Exemple Shelly Gen2 : curl -u admin:VOTRE_MOT_DE_PASSE --insecure "
+            "Exemple Shelly Gen2 : curl --anyauth -u admin:VOTRE_MOT_DE_PASSE "
             "http://IP_DE_LA_PRISE/rpc/Switch.Set?id=0&on=true<br>"
             "Exemple copie du 3MF : cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\sauvegarde.3mf\""
         ),
         "hint_label": "Texte affiché dans la case à cocher.",
         "hint_delay": "Délai en secondes avant exécution (après la commande précédente).",
         "hint_default": "Si coché, la commande sera activée par défaut.",
-        "btn_add": "Ajouter",
+        "btn_add": "Ajouter sans modèle",
         "btn_del": "Supprimer",
         "new_program": "Nouveau programme",
         "tooltip_cmd": "Programme + arguments, ex: calc.exe ou curl https://... --insecure",
@@ -95,14 +95,14 @@ cfgini_TRANSLATIONS = {
             "Example with arguments: curl https://myserver/api --insecure<br>"
             "HTTP request with argument: curl -X POST https://domotics/api "
             "-d \"apikey=YOUR_KEY&action=on\"<br>"
-            "Shelly Gen2 example: curl -u admin:YOUR_PASSWORD --insecure "
+            "Shelly Gen2 example: curl --anyauth -u admin:YOUR_PASSWORD "
             "http://PLUG_IP/rpc/Switch.Set?id=0&on=true<br>"
             "Copy the 3MF: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Text displayed in the checkbox.",
         "hint_delay": "Delay in seconds before execution (after the previous command).",
         "hint_default": "If checked, the command will be enabled by default.",
-        "btn_add": "Add",
+        "btn_add": "Add from scratch",
         "btn_del": "Delete",
         "new_program": "New program",
         "tooltip_cmd": "Program + arguments, e.g. calc.exe or curl https://... --insecure",
@@ -128,14 +128,14 @@ cfgini_TRANSLATIONS = {
             "Beispiel mit Parametern: curl https://myserver/api --insecure<br>"
             "HTTP Anfrage mit Parametern: curl -X POST https://domotics/api "
             "-d \"apikey=IHR_SCHLUESSEL&action=on\"<br>"
-            "Shelly Gen2 Beispiel: curl -u admin:IHR_PASSWORT --insecure "
+            "Shelly Gen2 Beispiel: curl --anyauth -u admin:IHR_PASSWORT "
             "http://IP_DER_STECKDOSE/rpc/Switch.Set?id=0&on=true<br>"
             "3MF kopieren: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Name des Programmes",
         "hint_delay": "Verzögerung in Sekunden vor der Ausführung (nach dem vorherigen Befehl)",
         "hint_default": "Wenn aktiviert, wird der Befehl standardmäßig ausgeführt",
-        "btn_add": "Hinzufügen",
+        "btn_add": "Ohne Vorlage hinzufügen",
         "btn_del": "Löschen",
         "new_program": "Neues Programm",
         "tooltip_cmd": "Programm + Argumente, z.B. calc.exe oder curl https://... --insecure",
@@ -149,6 +149,209 @@ cfgini_TRANSLATIONS = {
         "error_command": "Zeile {row}: der Befehl konnte nicht zerlegt werden ({error}).",
         "error_write": "Die Einstellungsdatei konnte nicht gespeichert werden:\n{path}\n\n{error}",
     }
+}
+
+
+# Zone d'édition sous le tableau : modèles, Parcourir, variables, vérification, test
+cfgini_EDITOR_TEXTS = {
+    "fr": {
+        "editor_title": "Commande de la ligne sélectionnée",
+        "cmd_placeholder": "Programme puis ses paramètres, ex. : curl \"http://...\"",
+        "btn_templates": "Ajouter un modèle",
+        "btn_browse": "Parcourir…",
+        "btn_vars": "Insérer une variable",
+        "btn_test": "Tester",
+        "hint_browse": "Choisir un programme (ou un fichier à passer en paramètre) : son chemin est inséré entre guillemets",
+        "hint_test": "Exécute la commande maintenant, avec les chemins affichés, et dit si elle a réussi",
+        "var_export3mf": "le 3MF exporté",
+        "var_export": "l'export, sans extension",
+        "var_exportname": "nom de l'export, sans extension",
+        "var_project": "le projet FreeCAD, sans extension",
+        "var_projectdir": "dossier du projet",
+        "var_projectname": "nom du projet, sans extension",
+        "tpl_program": "Lancer un programme…",
+        "tpl_copy": "Copier le 3MF dans un dossier",
+        "tpl_open_folder": "Ouvrir le dossier du projet",
+        "tpl_web": "Requête web (curl)",
+        "tpl_shelly1": "Allumer une prise Shelly Gen 1",
+        "tpl_shelly2": "Allumer une prise Shelly Gen 2",
+        "tpl_shelly2_pw": "Allumer une prise Shelly Gen 2 avec mot de passe",
+        "tpl_klipper": "Préchauffer le plateau à 60 °C (Klipper)",
+        "tpl_python": "Lancer un script Python sur le 3MF",
+        "ph_folder": "DOSSIER_DE_DESTINATION",
+        "ph_ip_plug": "IP_DE_LA_PRISE",
+        "ph_ip_printer": "IP_DE_L_IMPRIMANTE",
+        "ph_password": "MOT_DE_PASSE",
+        "ph_server": "ADRESSE_DU_SERVEUR",
+        "ph_script": "MON_SCRIPT",
+        "tpl_shelly_cloud": "Allumer une prise Shelly par le cloud (clé API)",
+        "tpl_home_assistant": "Allumer une prise via Home Assistant (jeton)",
+        "tpl_jeedom": "Lancer une commande Jeedom (clé API)",
+        "ph_cloud_server": "SERVEUR_CLOUD",
+        "ph_device_id": "ID_DE_LA_PRISE",
+        "ph_api_key": "CLE_API",
+        "ph_token": "JETON",
+        "ph_entity": "NOM_DE_LA_PRISE",
+        "ph_ha": "ADRESSE_HOME_ASSISTANT",
+        "ph_jeedom": "ADRESSE_JEEDOM",
+        "ph_cmd_id": "ID_DE_LA_COMMANDE",
+        "chk_program": "Programme : {prog} → {path}",
+        "chk_not_found": "Programme introuvable : {prog}. Indiquez son chemin complet (bouton Parcourir…) ou vérifiez son nom.",
+        "chk_builtin": "« {word} » est une commande interne de Windows, pas un programme : écrivez cmd /c {word} …",
+        "chk_params": "Paramètres",
+        "chk_no_params": "Aucun paramètre",
+        "chk_example": "(chemins d'exemple : ouvrez cette fenêtre avec le bouton ⚙️ de la macro pour voir les vrais)",
+        "chk_unclosed": "Guillemet non fermé.",
+        "chk_placeholder": "À remplacer : {items}",
+        "chk_single_quotes": "Sous Windows, mettez des guillemets doubles \"…\" : les guillemets simples sont passés tels quels au programme ({arg}).",
+        "chk_shell_op": "« {op} » ne fonctionne pas ici (la commande est lancée sans interpréteur) : pour l'utiliser, écrivez cmd /c … (Windows) ou sh -c \"…\" (Linux).",
+        "chk_unknown_var": "{var} n'est pas une variable de la macro : elle restera telle quelle.",
+        "test_title": "Tester la commande",
+        "test_confirm": "Cette commande va vraiment être exécutée maintenant :\n\n{cmd}\n\nContinuer ?",
+        "test_blocked": "La commande ne peut pas être lancée :\n\n{errors}",
+        "test_running": "Test en cours…",
+        "test_ok": "Test : terminée sans erreur.",
+        "test_ok_explorer": "Test : dossier ouvert.",
+        "test_fail": "Test : terminée avec le code {code}, la commande a probablement échoué.",
+        "test_still": "Test : lancée, toujours en cours après {sec} s (programme avec une fenêtre ?).",
+        "test_error": "Test : lancement impossible ({error}).",
+        "curl_6": "adresse introuvable : vérifiez le nom ou l'IP",
+        "curl_7": "connexion refusée ou appareil éteint",
+        "curl_22": "le serveur a répondu par une erreur HTTP : adresse, clé API ou mot de passe incorrect ?",
+        "curl_28": "pas de réponse dans le temps imparti",
+    },
+    "en": {
+        "editor_title": "Command of the selected row",
+        "cmd_placeholder": "Program then its parameters, e.g. curl \"http://...\"",
+        "btn_templates": "Add from a template",
+        "btn_browse": "Browse…",
+        "btn_vars": "Insert a variable",
+        "btn_test": "Test",
+        "hint_browse": "Choose a program (or a file to pass as a parameter): its path is inserted between quotes",
+        "hint_test": "Runs the command now, with the paths shown, and tells whether it succeeded",
+        "var_export3mf": "the exported 3MF",
+        "var_export": "the export, without extension",
+        "var_exportname": "export name, without extension",
+        "var_project": "the FreeCAD project, without extension",
+        "var_projectdir": "project folder",
+        "var_projectname": "project name, without extension",
+        "tpl_program": "Run a program…",
+        "tpl_copy": "Copy the 3MF to a folder",
+        "tpl_open_folder": "Open the project folder",
+        "tpl_web": "Web request (curl)",
+        "tpl_shelly1": "Turn on a Shelly Gen 1 plug",
+        "tpl_shelly2": "Turn on a Shelly Gen 2 plug",
+        "tpl_shelly2_pw": "Turn on a Shelly Gen 2 plug with password",
+        "tpl_klipper": "Preheat the bed to 60 °C (Klipper)",
+        "tpl_python": "Run a Python script on the 3MF",
+        "ph_folder": "DESTINATION_FOLDER",
+        "ph_ip_plug": "PLUG_IP",
+        "ph_ip_printer": "PRINTER_IP",
+        "ph_password": "PASSWORD",
+        "ph_server": "SERVER_ADDRESS",
+        "ph_script": "MY_SCRIPT",
+        "tpl_shelly_cloud": "Turn on a Shelly plug through the cloud (API key)",
+        "tpl_home_assistant": "Turn on a plug through Home Assistant (token)",
+        "tpl_jeedom": "Run a Jeedom command (API key)",
+        "ph_cloud_server": "CLOUD_SERVER",
+        "ph_device_id": "DEVICE_ID",
+        "ph_api_key": "API_KEY",
+        "ph_token": "TOKEN",
+        "ph_entity": "PLUG_NAME",
+        "ph_ha": "HOME_ASSISTANT_ADDRESS",
+        "ph_jeedom": "JEEDOM_ADDRESS",
+        "ph_cmd_id": "COMMAND_ID",
+        "chk_program": "Program: {prog} → {path}",
+        "chk_not_found": "Program not found: {prog}. Give its full path (Browse… button) or check its name.",
+        "chk_builtin": "\"{word}\" is a command built into Windows, not a program: write cmd /c {word} …",
+        "chk_params": "Parameters",
+        "chk_no_params": "No parameters",
+        "chk_example": "(example paths: open this window with the macro's ⚙️ button to see the real ones)",
+        "chk_unclosed": "Unclosed quote.",
+        "chk_placeholder": "To replace: {items}",
+        "chk_single_quotes": "On Windows, use double quotes \"…\": single quotes are passed as is to the program ({arg}).",
+        "chk_shell_op": "\"{op}\" does not work here (the command is run without a shell): to use it, write cmd /c … (Windows) or sh -c \"…\" (Linux).",
+        "chk_unknown_var": "{var} is not a variable of the macro: it will be left as is.",
+        "test_title": "Test the command",
+        "test_confirm": "This command will really be run now:\n\n{cmd}\n\nContinue?",
+        "test_blocked": "The command cannot be run:\n\n{errors}",
+        "test_running": "Testing…",
+        "test_ok": "Test: finished without error.",
+        "test_ok_explorer": "Test: folder opened.",
+        "test_fail": "Test: finished with code {code}, the command probably failed.",
+        "test_still": "Test: started, still running after {sec} s (program with a window?).",
+        "test_error": "Test: could not start ({error}).",
+        "curl_6": "address not found: check the name or IP",
+        "curl_7": "connection refused or device off",
+        "curl_22": "the server answered with an HTTP error: wrong address, API key or password?",
+        "curl_28": "no answer in time",
+    },
+    "de": {
+        "editor_title": "Befehl der ausgewählten Zeile",
+        "cmd_placeholder": "Programm, dann seine Parameter, z.B. curl \"http://...\"",
+        "btn_templates": "Aus Vorlage hinzufügen",
+        "btn_browse": "Durchsuchen…",
+        "btn_vars": "Variable einfügen",
+        "btn_test": "Testen",
+        "hint_browse": "Programm (oder als Parameter zu übergebende Datei) wählen: der Pfad wird in Anführungszeichen eingefügt",
+        "hint_test": "Führt den Befehl jetzt mit den angezeigten Pfaden aus und meldet, ob er erfolgreich war",
+        "var_export3mf": "die exportierte 3MF",
+        "var_export": "der Export, ohne Endung",
+        "var_exportname": "Name des Exports, ohne Endung",
+        "var_project": "das FreeCAD-Projekt, ohne Endung",
+        "var_projectdir": "Projektordner",
+        "var_projectname": "Projektname, ohne Endung",
+        "tpl_program": "Ein Programm starten…",
+        "tpl_copy": "Die 3MF in einen Ordner kopieren",
+        "tpl_open_folder": "Projektordner öffnen",
+        "tpl_web": "Web-Anfrage (curl)",
+        "tpl_shelly1": "Shelly-Steckdose Gen 1 einschalten",
+        "tpl_shelly2": "Shelly-Steckdose Gen 2 einschalten",
+        "tpl_shelly2_pw": "Shelly-Steckdose Gen 2 mit Passwort einschalten",
+        "tpl_klipper": "Druckbett auf 60 °C vorheizen (Klipper)",
+        "tpl_python": "Python-Skript auf die 3MF anwenden",
+        "ph_folder": "ZIELORDNER",
+        "ph_ip_plug": "IP_DER_STECKDOSE",
+        "ph_ip_printer": "DRUCKER_IP",
+        "ph_password": "PASSWORT",
+        "ph_server": "SERVERADRESSE",
+        "ph_script": "MEIN_SKRIPT",
+        "tpl_shelly_cloud": "Shelly-Steckdose über die Cloud einschalten (API-Schlüssel)",
+        "tpl_home_assistant": "Steckdose über Home Assistant einschalten (Token)",
+        "tpl_jeedom": "Jeedom-Befehl ausführen (API-Schlüssel)",
+        "ph_cloud_server": "CLOUD_SERVER",
+        "ph_device_id": "GERAETE_ID",
+        "ph_api_key": "API_SCHLUESSEL",
+        "ph_token": "TOKEN",
+        "ph_entity": "NAME_DER_STECKDOSE",
+        "ph_ha": "HOME_ASSISTANT_ADRESSE",
+        "ph_jeedom": "JEEDOM_ADRESSE",
+        "ph_cmd_id": "BEFEHLS_ID",
+        "chk_program": "Programm: {prog} → {path}",
+        "chk_not_found": "Programm nicht gefunden: {prog}. Geben Sie den vollständigen Pfad an (Durchsuchen…) oder prüfen Sie den Namen.",
+        "chk_builtin": "„{word}“ ist ein interner Windows-Befehl, kein Programm: schreiben Sie cmd /c {word} …",
+        "chk_params": "Parameter",
+        "chk_no_params": "Keine Parameter",
+        "chk_example": "(Beispielpfade: öffnen Sie dieses Fenster mit der ⚙️-Schaltfläche des Makros, um die echten zu sehen)",
+        "chk_unclosed": "Nicht geschlossenes Anführungszeichen.",
+        "chk_placeholder": "Zu ersetzen: {items}",
+        "chk_single_quotes": "Unter Windows doppelte Anführungszeichen \"…\" verwenden: einfache werden unverändert an das Programm übergeben ({arg}).",
+        "chk_shell_op": "„{op}“ funktioniert hier nicht (der Befehl wird ohne Shell gestartet): schreiben Sie dafür cmd /c … (Windows) oder sh -c \"…\" (Linux).",
+        "chk_unknown_var": "{var} ist keine Variable des Makros: sie bleibt unverändert.",
+        "test_title": "Befehl testen",
+        "test_confirm": "Dieser Befehl wird jetzt wirklich ausgeführt:\n\n{cmd}\n\nFortfahren?",
+        "test_blocked": "Der Befehl kann nicht gestartet werden:\n\n{errors}",
+        "test_running": "Test läuft…",
+        "test_ok": "Test: ohne Fehler beendet.",
+        "test_ok_explorer": "Test: Ordner geöffnet.",
+        "test_fail": "Test: mit Code {code} beendet, der Befehl ist wahrscheinlich fehlgeschlagen.",
+        "test_still": "Test: gestartet, läuft nach {sec} s noch (Programm mit Fenster?).",
+        "test_error": "Test: Start nicht möglich ({error}).",
+        "curl_6": "Adresse nicht gefunden: Namen oder IP prüfen",
+        "curl_7": "Verbindung abgelehnt oder Gerät aus",
+        "curl_22": "der Server hat mit einem HTTP-Fehler geantwortet: Adresse, API-Schlüssel oder Passwort falsch?",
+        "curl_28": "keine Antwort in der vorgesehenen Zeit",
+    },
 }
 
 
@@ -166,7 +369,10 @@ def cfgini_language():
 
 def cfgini_tr(key):
     lang = cfgini_language()
-    text = cfgini_TRANSLATIONS.get(lang, cfgini_TRANSLATIONS["en"]).get(key, key)
+    texts = dict(cfgini_TRANSLATIONS["en"], **cfgini_EDITOR_TEXTS["en"])
+    texts.update(cfgini_TRANSLATIONS.get(lang, {}))
+    texts.update(cfgini_EDITOR_TEXTS.get(lang, {}))
+    text = texts.get(key, key)
     if key == "hint_command":
         text += cfgini_PLACEHOLDERS.get(lang, cfgini_PLACEHOLDERS["en"])
     return text
@@ -246,6 +452,232 @@ def cfgini_parse_delay(text):
     if value < 0 or value != value:
         raise ValueError(text)
     return int(value) if value == int(value) else value
+
+
+# -------------------------
+# Aide à la saisie : chemins, vérification, modèles, test
+# -------------------------
+cfgini_VARIABLES = ("%PROJECT%", "%PROJECTDIR%", "%PROJECTNAME%", "%EXPORT%", "%EXPORTNAME%")
+
+# Commandes internes de l'invite de commandes Windows (pas des programmes)
+cfgini_WINDOWS_BUILTINS = {
+    "assoc", "call", "cd", "chdir", "cls", "copy", "date", "del", "dir", "echo", "erase",
+    "for", "ftype", "if", "md", "mkdir", "mklink", "move", "path", "pause", "popd",
+    "pushd", "rd", "ren", "rename", "rmdir", "set", "start", "time", "title", "type",
+    "ver", "vol",
+}
+cfgini_SHELL_OPERATORS = {">", ">>", "<", "|", "||", "&", "&&", "2>", "2>&1", ";"}
+
+
+def cfgini_context():
+    """
+    Valeurs des variables pour l'aperçu et le test : celles transmises par la macro
+    principale (CFGINI_CONTEXT, bouton ⚙️), sinon le document actif, sinon un exemple.
+    Renvoie (dictionnaire des variables, True si ce sont des chemins d'exemple).
+    """
+    ctx = globals().get("CFGINI_CONTEXT") or {}
+    project, export, example = ctx.get("PROJECT"), ctx.get("EXPORT"), False
+    if not project:
+        try:
+            import FreeCAD
+            doc = FreeCAD.ActiveDocument
+            if doc is not None and doc.FileName:
+                project = os.path.splitext(doc.FileName)[0]
+        except Exception:
+            pass
+    if not project:
+        project = os.path.join(os.path.expanduser("~"), "Project")
+        example = True
+    if not export:
+        export = os.path.join(os.path.dirname(project), "Body")
+        example = True
+    # Même normalisation que la macro principale (FreeCAD donne « D:/… » sous Windows)
+    project, export = os.path.normpath(project), os.path.normpath(export)
+    return {
+        "%PROJECT%": project,
+        "%PROJECTDIR%": os.path.dirname(project),
+        "%PROJECTNAME%": os.path.basename(project),
+        "%EXPORT%": export,
+        "%EXPORTNAME%": os.path.basename(export),
+    }, example
+
+
+def cfgini_substitute(parts, values):
+    """Même remplacement que la macro principale au lancement (run_extra_commands)."""
+    return [p.replace("%PROJECT%", values["%PROJECT%"])
+             .replace("%PROJECTDIR%", values["%PROJECTDIR%"])
+             .replace("%PROJECTNAME%", values["%PROJECTNAME%"])
+             .replace("%EXPORT%", values["%EXPORT%"])
+             .replace("%EXPORTNAME%", values["%EXPORTNAME%"])
+            for p in parts]
+
+
+def cfgini_find_program(program):
+    """Chemin du programme, ou None s'il est introuvable."""
+    if os.path.dirname(program):
+        return program if os.path.isfile(program) else None
+    return shutil.which(program)
+
+
+def cfgini_analyze(text, values, windows=None):
+    """
+    Analyse une ligne de commande. Renvoie un dict :
+      parts : arguments après remplacement des variables (None si la ligne est vide ou invalide)
+      program, program_path
+      errors, warnings : listes de messages (texte simple)
+    """
+    if windows is None:
+        windows = (os.name == "nt")
+    tr = cfgini_tr
+    result = {"parts": None, "program": None, "program_path": None, "errors": [], "warnings": []}
+    if not text.strip():
+        return result
+    try:
+        raw = cfgini_split_command(text, windows=windows)
+    except ValueError:
+        result["errors"].append(tr("chk_unclosed"))
+        return result
+    if not raw:
+        return result
+    parts = cfgini_substitute(raw, values)
+    result["parts"] = parts
+    program = parts[0]
+    result["program"] = program
+    name = os.path.basename(program).lower()
+
+    found = cfgini_find_program(program)
+    result["program_path"] = found
+    if found is None:
+        if windows and name in cfgini_WINDOWS_BUILTINS:
+            result["errors"].append(tr("chk_builtin").format(word=program))
+        elif not re.search(r"<[^<>\"]+>", program):
+            result["errors"].append(tr("chk_not_found").format(prog=program))
+
+    placeholders = sorted(set(re.findall(r"<[^<>\"\s]+>", text)))
+    if placeholders:
+        result["warnings"].append(tr("chk_placeholder").format(items=", ".join(placeholders)))
+
+    if windows:
+        for arg in raw[1:]:
+            if len(arg) >= 2 and arg.startswith("'") and arg.endswith("'"):
+                result["warnings"].append(tr("chk_single_quotes").format(arg=arg))
+                break
+
+    shells = ("cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe", "sh", "bash")
+    if name not in shells:
+        for arg in raw[1:]:
+            if arg in cfgini_SHELL_OPERATORS:
+                result["warnings"].append(tr("chk_shell_op").format(op=arg))
+                break
+
+    for var in sorted(set(re.findall(r"%[A-Za-z_][A-Za-z0-9_]*%", text))):
+        if var in cfgini_VARIABLES:
+            continue
+        if name in ("cmd", "cmd.exe") and var.strip("%").upper() in (k.upper() for k in os.environ):
+            continue  # variable d'environnement, remplacée par cmd
+        result["warnings"].append(tr("chk_unknown_var").format(var=var))
+    return result
+
+
+def cfgini_check_html(analysis, example):
+    """Texte (HTML) affiché sous la ligne de commande."""
+    tr = cfgini_tr
+    esc = html.escape
+    lines = []
+    for msg in analysis["errors"]:
+        lines.append(f"<span style='color:#c62828'>✗ {esc(msg)}</span>")
+    if analysis["program_path"]:
+        lines.append("<span style='color:#2e7d32'>✓ " + esc(tr("chk_program").format(
+            prog=analysis["program"], path=analysis["program_path"])) + "</span>")
+    for msg in analysis["warnings"]:
+        lines.append(f"<span style='color:#b26a00'>⚠ {esc(msg)}</span>")
+    parts = analysis["parts"]
+    if parts:
+        if len(parts) > 1:
+            shown = " &nbsp;│&nbsp; ".join(f"<code>{esc(p)}</code>" for p in parts[1:])
+            lines.append(f"{esc(tr('chk_params'))} : {shown}")
+        else:
+            lines.append(esc(tr("chk_no_params")))
+    if parts and example:
+        lines.append(f"<i>{esc(tr('chk_example'))}</i>")
+    return "<br>".join(lines)
+
+
+def cfgini_templates(windows=None):
+    """Modèles : (clé du libellé, commande). Commande None = choisir un programme."""
+    if windows is None:
+        windows = (os.name == "nt")
+    tr = cfgini_tr
+    ph = lambda key: "<" + tr(key) + ">"
+    sep = "\\" if windows else "/"
+    if windows:
+        copy_cmd = f'cmd /c copy /y "%EXPORT%.3mf" "{ph("ph_folder")}\\%EXPORTNAME%.3mf"'
+        open_cmd = 'explorer "%PROJECTDIR%"'
+        python = "python"
+    else:
+        copy_cmd = f'cp "%EXPORT%.3mf" "{ph("ph_folder")}/%EXPORTNAME%.3mf"'
+        open_cmd = ('open' if sys.platform == "darwin" else 'xdg-open') + ' "%PROJECTDIR%"'
+        python = "python3"
+    plug, printer = ph("ph_ip_plug"), ph("ph_ip_printer")
+    return [
+        ("tpl_program", None),
+        ("tpl_copy", copy_cmd),
+        ("tpl_open_folder", open_cmd),
+        ("tpl_web", f'curl --fail "http://{ph("ph_server")}/api?job=%PROJECTNAME%"'),
+        ("tpl_shelly1", f'curl --fail "http://{plug}/relay/0?turn=on"'),
+        ("tpl_shelly2", f'curl --fail "http://{plug}/rpc/Switch.Set?id=0&on=true"'),
+        ("tpl_shelly2_pw", f'curl --fail --anyauth -u admin:{ph("ph_password")} '
+                           f'"http://{plug}/rpc/Switch.Set?id=0&on=true"'),
+        ("tpl_shelly_cloud", f'curl --fail -X POST "https://{ph("ph_cloud_server")}/device/relay/control" '
+                             f'-d "channel=0&turn=on&id={ph("ph_device_id")}&auth_key={ph("ph_api_key")}"'),
+        ("tpl_home_assistant", f'curl --fail -X POST -H "Authorization: Bearer {ph("ph_token")}" '
+                               f'-H "Content-Type: application/json" '
+                               f'-d "{{\\"entity_id\\":\\"switch.{ph("ph_entity")}\\"}}" '
+                               f'"http://{ph("ph_ha")}:8123/api/services/switch/turn_on"'),
+        ("tpl_jeedom", f'curl --fail "http://{ph("ph_jeedom")}/core/api/jeeApi.php'
+                       f'?apikey={ph("ph_api_key")}&type=cmd&id={ph("ph_cmd_id")}"'),
+        ("tpl_klipper", f'curl --fail -X POST "http://{printer}:7125/printer/gcode/script?script=M140%20S60"'),
+        ("tpl_python", f'{python} "%PROJECTDIR%{sep}{ph("ph_script")}.py" "%EXPORT%.3mf"'),
+    ]
+
+
+def cfgini_run_test(parts, timeout=3.0):
+    """
+    Lance la commande comme la macro (sans interpréteur) et attend au plus `timeout` s.
+    Renvoie ("done", code), ("running", None) ou ("error", message).
+    """
+    try:
+        proc = subprocess.Popen(parts)
+    except Exception as e:
+        return ("error", str(e))
+    end = time.time() + timeout
+    while time.time() < end:
+        code = proc.poll()
+        if code is not None:
+            return ("done", code)
+        app = QtGui.QApplication.instance()
+        if app is not None:
+            app.processEvents()
+        time.sleep(0.05)
+    return ("running", None)
+
+
+def cfgini_test_message(parts, outcome, timeout=3.0):
+    tr = cfgini_tr
+    kind, value = outcome
+    name = os.path.splitext(os.path.basename(parts[0]))[0].lower()
+    if kind == "error":
+        return False, tr("test_error").format(error=value)
+    if kind == "running":
+        return True, tr("test_still").format(sec=f"{timeout:g}")
+    if value == 0:
+        return True, tr("test_ok")
+    if name == "explorer":  # l'Explorateur répond 1 même quand il a ouvert le dossier
+        return True, tr("test_ok_explorer")
+    msg = tr("test_fail").format(code=value)
+    if name == "curl" and f"curl_{value}" in cfgini_EDITOR_TEXTS["en"]:
+        msg += " (" + tr(f"curl_{value}") + ")"
+    return False, msg
 
 
 # -------------------------
@@ -348,7 +780,7 @@ def show_extra_commands_dialog(parent=None, path=None):
 
     dialog = QtGui.QDialog(parent)
     dialog.setWindowTitle(tr("dialog_title"))
-    dialog.resize(900, 500)
+    dialog.resize(900, 650)
 
     layout = QtGui.QVBoxLayout()
 
@@ -408,26 +840,231 @@ def show_extra_commands_dialog(parent=None, path=None):
     table.setColumnWidth(1, table.columnWidth(1) * 2)
     layout.addWidget(table)
 
-    # Boutons Ajouter / Supprimer
+    # Boutons Ajouter un modèle / Ajouter sans modèle / Supprimer
     btn_add = QtGui.QPushButton(tr("btn_add"))
+    btn_templates = QtGui.QPushButton(tr("btn_templates"))
+    menu_templates = QtGui.QMenu(btn_templates)
+    btn_templates.setMenu(menu_templates)
     btn_del = QtGui.QPushButton(tr("btn_del"))
     h_btns = QtGui.QHBoxLayout()
+    h_btns.addWidget(btn_templates)   # en premier : le plus utile pour démarrer
     h_btns.addWidget(btn_add)
     h_btns.addWidget(btn_del)
     layout.addLayout(h_btns)
 
-    def on_add():
-        row = add_row()
+    # --- Zone d'édition de la commande de la ligne sélectionnée ---
+    values, example = cfgini_context()
+    editor = QtGui.QGroupBox(tr("editor_title"))
+    ed_layout = QtGui.QVBoxLayout(editor)
+    cmd_edit = QtGui.QLineEdit()
+    cmd_edit.setPlaceholderText(tr("cmd_placeholder"))
+    cmd_edit.setToolTip(tr("hint_command"))
+    ed_layout.addWidget(cmd_edit)
+    h_tools = QtGui.QHBoxLayout()
+    btn_browse = QtGui.QPushButton(tr("btn_browse"))
+    btn_browse.setToolTip(tr("hint_browse"))
+    btn_vars = QtGui.QPushButton(tr("btn_vars"))
+    menu_vars = QtGui.QMenu(btn_vars)
+    btn_vars.setMenu(menu_vars)
+    btn_test = QtGui.QPushButton(tr("btn_test"))
+    btn_test.setToolTip(tr("hint_test"))
+    h_tools.addWidget(btn_browse)
+    h_tools.addWidget(btn_vars)
+    h_tools.addStretch(1)
+    h_tools.addWidget(btn_test)
+    ed_layout.addLayout(h_tools)
+    lbl_check = QtGui.QLabel()
+    lbl_check.setTextFormat(QtCore.Qt.RichText)
+    lbl_check.setWordWrap(True)
+    lbl_check.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+    lbl_check.setMinimumHeight(60)
+    lbl_check.setAlignment(QtCore.Qt.AlignTop | QtCore.Qt.AlignLeft)
+    ed_layout.addWidget(lbl_check)
+    lbl_test = QtGui.QLabel()
+    lbl_test.setWordWrap(True)
+    ed_layout.addWidget(lbl_test)
+    layout.addWidget(editor)
+
+    syncing = [False]
+
+    def current_row():
+        r = table.currentRow()
+        return r if 0 <= r < table.rowCount() else -1
+
+    def update_check():
+        analysis = cfgini_analyze(cmd_edit.text(), values)
+        lbl_check.setText(cfgini_check_html(analysis, example))
+        btn_test.setEnabled(current_row() >= 0 and bool(analysis["parts"]))
+        return analysis
+
+    def load_editor():
+        r = current_row()
+        for w in (cmd_edit, btn_browse, btn_vars):
+            w.setEnabled(r >= 0)
+        syncing[0] = True
+        item = table.item(r, 0) if r >= 0 else None
+        cmd_edit.setText(item.text() if item is not None else "")
+        syncing[0] = False
+        lbl_test.setText("")
+        update_check()
+
+    def on_edit(text):
+        if syncing[0]:
+            return
+        r = current_row()
+        if r >= 0 and table.item(r, 0) is not None:
+            syncing[0] = True
+            table.item(r, 0).setText(text)
+            syncing[0] = False
+        lbl_test.setText("")
+        update_check()
+
+    def on_item_changed(item):
+        if syncing[0] or item.column() != 0 or item.row() != current_row():
+            return
+        syncing[0] = True
+        cmd_edit.setText(item.text())
+        syncing[0] = False
+        update_check()
+
+    table.currentCellChanged.connect(lambda *a: load_editor())
+    table.itemChanged.connect(on_item_changed)
+    cmd_edit.textChanged.connect(on_edit)
+
+    def select_row(row):
         table.setCurrentCell(row, 0)
-        table.editItem(table.item(row, 0))
+        load_editor()
+        cmd_edit.setFocus()
+
+    def on_add():
+        select_row(add_row())
 
     def del_row():
         row = table.currentRow()
         if row >= 0:
             table.removeRow(row)
+        load_editor()
+
+    def set_label_if_default(row, label):
+        item = table.item(row, 1)
+        if item is not None and item.text().strip() in ("", tr("new_program")):
+            item.setText(label)
+
+    def choose_file():
+        result = QtGui.QFileDialog.getOpenFileName(dialog, tr("btn_browse"))
+        return result[0] if isinstance(result, (tuple, list)) else result
+
+    def in_first_token(before):
+        """Vrai si `before` (texte avant le curseur) n'a pas encore dépassé le programme."""
+        in_q = False
+        for c in before.lstrip():
+            if c == '"':
+                in_q = not in_q
+            elif c.isspace() and not in_q:
+                return False
+        return True
+
+    def insert_text(text, quote=True):
+        """Insère au curseur ; entre guillemets si on est en début d'argument."""
+        pos = cmd_edit.cursorPosition()
+        current = cmd_edit.text()
+        inside_quotes = current[:pos].count('"') % 2 == 1
+        at_token_start = pos == 0 or current[pos - 1].isspace()
+        # Collé au programme ou à un argument entre guillemets : il faut un espace
+        # (au milieu d'un argument, ex. « job=| » dans une adresse, on colle)
+        if not at_token_start and not inside_quotes and (
+                current[pos - 1] == '"' or in_first_token(current[:pos])):
+            text_prefix = " "
+            at_token_start = True
+        else:
+            text_prefix = ""
+        if quote and not inside_quotes and at_token_start:
+            text = '"' + text + '"'
+        if pos < len(current) and at_token_start and not current[pos].isspace() and not inside_quotes:
+            text += " "
+        cmd_edit.insert(text_prefix + text)
+        cmd_edit.setFocus()
+
+    def on_browse():
+        path_chosen = choose_file()
+        if not path_chosen:
+            return
+        path_chosen = os.path.normpath(path_chosen)
+        r = current_row()
+        if not cmd_edit.text().strip():
+            cmd_edit.setText(cfgini_join_command([path_chosen]))
+            if r >= 0:
+                set_label_if_default(r, os.path.splitext(os.path.basename(path_chosen))[0])
+        else:
+            current = cmd_edit.text()
+            if cmd_edit.cursorPosition() == len(current) and not current.endswith(" "):
+                cmd_edit.setText(current + " ")
+                cmd_edit.setCursorPosition(len(current) + 1)
+            insert_text(path_chosen, quote=any(c.isspace() for c in path_chosen))
+
+    def apply_template(label_key, command):
+        if command is None:  # « Lancer un programme… »
+            path_chosen = choose_file()
+            if not path_chosen:
+                return
+            path_chosen = os.path.normpath(path_chosen)
+            row = add_row(cfgini_join_command([path_chosen]),
+                          os.path.splitext(os.path.basename(path_chosen))[0])
+            select_row(row)
+            return
+        row = add_row(command, tr(label_key))
+        select_row(row)
+        # Sélection de la première partie à remplacer : il suffit de taper
+        m = re.search(r"<[^<>\"\s]+>", command)
+        if m:
+            cmd_edit.setSelection(m.start(), m.end() - m.start())
+
+    for label_key, command in cfgini_templates():
+        action = menu_templates.addAction(tr(label_key))
+        action.triggered.connect(lambda checked=False, k=label_key, c=command: apply_template(k, c))
+
+    for var, key in (("%EXPORT%.3mf", "var_export3mf"), ("%EXPORT%", "var_export"),
+                     ("%EXPORTNAME%", "var_exportname"), ("%PROJECT%", "var_project"),
+                     ("%PROJECTDIR%", "var_projectdir"), ("%PROJECTNAME%", "var_projectname")):
+        sample = cfgini_substitute([var], values)[0]
+        action = menu_vars.addAction(f"{var}   —   {tr(key)}")
+        action.setToolTip(sample)
+        action.setStatusTip(sample)
+        action.triggered.connect(lambda checked=False, v=var: insert_text(v))
+
+    def on_test():
+        analysis = update_check()
+        parts = analysis["parts"]
+        if not parts:
+            return
+        if analysis["errors"]:
+            QtGui.QMessageBox.warning(dialog, tr("test_title"), tr("test_blocked").format(
+                errors="\n".join(analysis["errors"])))
+            return
+        shown = subprocess.list2cmdline(parts) if os.name == "nt" else \
+            " ".join(shlex.quote(p) for p in parts)
+        answer = QtGui.QMessageBox.question(
+            dialog, tr("test_title"), tr("test_confirm").format(cmd=shown),
+            QtGui.QMessageBox.Yes | QtGui.QMessageBox.No, QtGui.QMessageBox.No)
+        if answer != QtGui.QMessageBox.Yes:
+            return
+        btn_test.setEnabled(False)
+        lbl_test.setStyleSheet("")
+        lbl_test.setText(tr("test_running"))
+        try:
+            ok, msg = cfgini_test_message(parts, cfgini_run_test(parts))
+        finally:
+            btn_test.setEnabled(True)
+        lbl_test.setStyleSheet("color:#2e7d32" if ok else "color:#c62828")
+        lbl_test.setText(("✓ " if ok else "✗ ") + msg)
 
     btn_add.clicked.connect(on_add)
     btn_del.clicked.connect(del_row)
+    btn_browse.clicked.connect(on_browse)
+    btn_test.clicked.connect(on_test)
+    if table.rowCount():
+        table.setCurrentCell(0, 0)
+    load_editor()
 
     # Boutons OK / Annuler
     btns = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)

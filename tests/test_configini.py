@@ -218,4 +218,187 @@ expect(order == ["a", "b", "c"], f"ordre a, b, c ({order})")
 if len(launched) == 3:
     expect(launched[2][0] - t0 >= 0.45, f"délais cumulés : c après {launched[2][0] - t0:.2f} s")
 
+# 8) Aide à la saisie : vérification de la commande
+values = {"%PROJECT%": os.path.join(OUT, "Mon projet"), "%PROJECTDIR%": OUT,
+          "%PROJECTNAME%": "Mon projet", "%EXPORT%": os.path.join(OUT, "Body"), "%EXPORTNAME%": "Body"}
+analyze = lambda t: cfg["cfgini_analyze"](t, values, windows=True)
+a = analyze('cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\\b.3mf"')
+expect(not a["errors"] and not a["warnings"] and a["program_path"]
+       and a["parts"][4] == os.path.join(OUT, "Body") + ".3mf", f"cmd /c copy : correct, variables remplacées ({a})")
+a = analyze('copy "%EXPORT%.3mf" b.3mf')
+expect(any("cmd /c copy" in e for e in a["errors"]), f"copy seul : commande interne signalée ({a['errors']})")
+a = analyze("programme_qui_n_existe_pas.exe")
+expect(a["errors"] and "introuvable" in a["errors"][0], f"programme introuvable ({a['errors']})")
+expect(analyze('echo "pas fermé')["errors"], "guillemet non fermé signalé")
+a = analyze("curl 'http://h/x'")
+expect(any("guillemets doubles" in w for w in a["warnings"]), f"guillemets simples signalés ({a['warnings']})")
+a = analyze("curl http://h/x > out.txt")
+expect(any("« > »" in w for w in a["warnings"]), f"redirection signalée ({a['warnings']})")
+a = analyze("cmd /c echo %USERPROFILE% %EXPORTS%")
+expect(len(a["warnings"]) == 1 and "%EXPORTS%" in a["warnings"][0],
+       f"variable inconnue signalée, variable d'environnement acceptée pour cmd ({a['warnings']})")
+a = analyze('curl -X POST "http://h:7125/printer/gcode/script?script=M140%20S60"')
+expect(not a["errors"] and not a["warnings"], f"%20 dans une adresse : rien à signaler ({a})")
+for key, command in cfg["cfgini_templates"](windows=True):
+    if command is None:
+        continue
+    a = analyze(command)
+    builtin = any("interne" in e for e in a["errors"])
+    expect(not builtin and a["parts"], f"modèle {key} : {command} ({a['errors']} {a['warnings']})")
+    if "<" in command:
+        expect(any("À remplacer" in w for w in a["warnings"]), f"modèle {key} : parties à remplacer signalées")
+tpl = dict(cfg["cfgini_templates"](windows=True))
+expect(split(tpl["tpl_home_assistant"], windows=True) == [
+    "curl", "--fail", "-X", "POST", "-H", "Authorization: Bearer <JETON>", "-H", "Content-Type: application/json",
+    "-d", '{"entity_id":"switch.<NOM_DE_LA_PRISE>"}',
+    "http://<ADRESSE_HOME_ASSISTANT>:8123/api/services/switch/turn_on"],
+    f"Home Assistant : JSON passé intact ({split(tpl['tpl_home_assistant'], windows=True)})")
+expect(split(tpl["tpl_jeedom"], windows=True) == [
+    "curl", "--fail", "http://<ADRESSE_JEEDOM>/core/api/jeeApi.php?apikey=<CLE_API>&type=cmd&id=<ID_DE_LA_COMMANDE>"],
+    "Jeedom : adresse en un seul argument")
+expect(split(tpl["tpl_shelly_cloud"], windows=True)[-1] == "channel=0&turn=on&id=<ID_DE_LA_PRISE>&auth_key=<CLE_API>",
+       "Shelly cloud : paramètres en un seul argument")
+for key in ("tpl_home_assistant", "tpl_jeedom", "tpl_shelly_cloud"):
+    parts = split(tpl[key], windows=True)
+    expect(split(join(parts, windows=True), windows=True) == parts, f"{key} : aller-retour dans la fenêtre")
+# Même remplacement que la macro principale au lancement
+launched.clear()
+main["run_extra_commands"]([(True, ["x", "%PROJECTDIR%\\%PROJECTNAME%_%EXPORTNAME%", "%PROJECT%|%EXPORT%"], 0)],
+                           values["%PROJECT%"] + ".FCStd", values["%EXPORT%"])
+expect(launched and launched[0][1] == cfg["cfgini_substitute"](
+    ["x", "%PROJECTDIR%\\%PROJECTNAME%_%EXPORTNAME%", "%PROJECT%|%EXPORT%"], values),
+    "aperçu identique au remplacement de la macro principale")
+
+# Chemins « D:/… » donnés par FreeCAD : remis au format Windows (Explorateur, cmd)
+launched.clear()
+main["run_extra_commands"]([(True, ["explorer", "%PROJECTDIR%", "%EXPORT%.3mf"], 0)],
+                           "D:/Datas/Imprimante 3D/proj.FCStd", "D:/Datas/Imprimante 3D/Body")
+expect(launched and launched[0][1] == ["explorer", "D:\\Datas\\Imprimante 3D", "D:\\Datas\\Imprimante 3D\\Body.3mf"],
+       f"macro principale : chemins avec \\ ({launched})")
+cfg["CFGINI_CONTEXT"] = {"PROJECT": "D:/Datas/Imprimante 3D/proj", "EXPORT": "D:/Datas/Imprimante 3D/Body"}
+ctx_values, _ = cfg["cfgini_context"]()
+expect(ctx_values["%PROJECTDIR%"] == "D:\\Datas\\Imprimante 3D"
+       and ctx_values["%EXPORT%"] == "D:\\Datas\\Imprimante 3D\\Body", f"ConfigIni : chemins avec \\ ({ctx_values})")
+del cfg["CFGINI_CONTEXT"]
+
+# 9) Tester : résultat du lancement
+run_test, test_msg = cfg["cfgini_run_test"], cfg["cfgini_test_message"]
+ok, msg = test_msg(["cmd"], run_test(["cmd", "/c", "exit", "0"]))
+expect(ok and "sans erreur" in msg, f"code 0 : {msg}")
+ok, msg = test_msg(["cmd"], run_test(["cmd", "/c", "exit", "3"]))
+expect(not ok and "code 3" in msg, f"code 3 : {msg}")
+ok, msg = test_msg(["x"], run_test(["programme_qui_n_existe_pas.exe"]))
+expect(not ok and "impossible" in msg, f"lancement impossible : {msg}")
+if shutil.which("curl"):
+    ok, msg = test_msg(["curl"], run_test(["curl", "-s", "--max-time", "2", "http://127.0.0.1:9/"]))
+    expect(not ok and ("refusée" in msg or "temps" in msg), f"curl sans réponse : {msg}")
+ok, msg = test_msg(["ping"], run_test(["ping", "-n", "5", "127.0.0.1"], timeout=0.5), timeout=0.5)
+expect(ok and "toujours en cours" in msg, f"programme encore en cours : {msg}")
+
+# 10) Fenêtre : modèle, saisie, variable, test, enregistrement
+open(INI, "w", encoding="utf-8").write("[Settings]\n")
+cfg["CFGINI_CONTEXT"] = {"PROJECT": values["%PROJECT%"], "EXPORT": values["%EXPORT%"]}
+seen = {}
+
+
+def find_label(d, start):
+    return [l.text() for l in d.findChildren(QtGui.QLabel) if l.text().startswith(start)]
+
+
+def button(d, text):
+    return [b for b in d.findChildren(QtGui.QPushButton) if b.text() == text][0]
+
+
+def use_template(d):
+    actions = button(d, "Ajouter un modèle").menu().actions()
+    [a for a in actions if a.text().startswith("Allumer une prise Shelly Gen 2")][0].trigger()
+    edit = d.findChild(QtGui.QLineEdit)
+    seen["selected"] = edit.selectedText()
+    edit.insert("192.168.1.50")
+    seen["after_ip"] = edit.text()
+    seen["cell"] = d.findChild(QtGui.QTableWidget).item(0, 0).text()
+    seen["label"] = d.findChild(QtGui.QTableWidget).item(0, 1).text()
+    seen["check1"] = [l.text() for l in d.findChildren(QtGui.QLabel) if "curl" in l.text()]
+
+
+def add_with_variable(d):
+    button(d, "Ajouter sans modèle").click()
+    edit = d.findChild(QtGui.QLineEdit)
+    edit.setText("cmd /c exit ")
+    edit.setCursorPosition(len(edit.text()))
+    actions = button(d, "Insérer une variable").menu().actions()
+    [a for a in actions if a.text().startswith("%EXPORT%.3mf")][0].trigger()
+    seen["with_var"] = edit.text()
+    seen["check2"] = [l.text() for l in d.findChildren(QtGui.QLabel) if "Paramètres" in l.text()]
+    # Espace ajouté après le programme, pas au milieu d'une adresse
+    seen["spacing"] = []
+    for start, var in (('"C:\\Program Files\\x.exe"', "%EXPORT%.3mf"), ("calc.exe", "%EXPORT%.3mf"),
+                       ("curl http://h/?job=", "%PROJECTNAME%"), ('curl "http://h/?job=', "%PROJECTNAME%"),
+                       ('cmd /c copy "a.3mf"', "%EXPORT%.3mf")):
+        edit.setText(start)
+        edit.setCursorPosition(len(start))
+        [a for a in actions if a.text().startswith(var + " ")][0].trigger()
+        seen["spacing"].append(edit.text())
+    edit.setText("cmd /c exit 0")
+    button(d, "Tester").click()
+
+
+def read_test(d):
+    """Renvoie False (étape à refaire) tant que le résultat du test n'est pas affiché."""
+    seen["test"] = [l.text() for l in d.findChildren(QtGui.QLabel) if l.text().startswith(("✓", "✗"))]
+    seen["read_tries"] = seen.get("read_tries", 0) + 1
+    return bool(seen["test"]) or seen["read_tries"] > 50
+
+
+def answer_yes(box):
+    yes = box.button(QtGui.QMessageBox.Yes)
+    if yes is not None:
+        events.append(("confirm", box.text()))
+        yes.click()
+        return True
+    return False
+
+
+def drive_dialog_yes(steps):
+    def tick():
+        boxes = find(QtGui.QMessageBox)
+        if boxes:
+            if not answer_yes(boxes[0]):
+                events.append(("message", boxes[0].text()))
+                boxes[0].close()
+            QtCore.QTimer.singleShot(50, tick)
+            return
+        dialogs = [d for d in find(QtGui.QDialog) if d.findChild(QtGui.QTableWidget)]
+        if not dialogs or not steps:
+            QtCore.QTimer.singleShot(50, tick) if steps else None
+            return
+        QtCore.QTimer.singleShot(300, tick)
+        step = steps.pop(0)
+        if step(dialogs[0]) is False:
+            steps.insert(0, step)
+    QtCore.QTimer.singleShot(50, tick)
+
+
+events.clear()
+drive_dialog_yes([use_template, add_with_variable, read_test, press_ok])
+saved = cfg["show_extra_commands_dialog"](None, INI)
+log("fenêtre :", seen, events)
+expect(seen.get("selected") == "<IP_DE_LA_PRISE>", f"modèle : la partie à remplacer est sélectionnée ({seen.get('selected')})")
+expect(seen.get("after_ip") == 'curl --fail "http://192.168.1.50/rpc/Switch.Set?id=0&on=true"'
+       and seen.get("cell") == seen.get("after_ip"), f"saisie recopiée dans le tableau ({seen.get('cell')})")
+expect(seen.get("label") == "Allumer une prise Shelly Gen 2", f"libellé du modèle ({seen.get('label')})")
+expect(seen.get("check1") and "À remplacer" not in seen["check1"][0], f"plus rien à remplacer ({seen.get('check1')})")
+expect(seen.get("with_var") == 'cmd /c exit "%EXPORT%.3mf"', f"variable insérée entre guillemets ({seen.get('with_var')})")
+expect(seen.get("spacing") == ['"C:\\Program Files\\x.exe" "%EXPORT%.3mf"', 'calc.exe "%EXPORT%.3mf"',
+                               'curl http://h/?job=%PROJECTNAME%', 'curl "http://h/?job=%PROJECTNAME%',
+                               'cmd /c copy "a.3mf" "%EXPORT%.3mf"'],
+       f"espace après le programme ou un argument entre guillemets ({seen.get('spacing')})")
+expect(bool(seen.get("check2")) and "Body.3mf" in seen["check2"][0],
+       f"aperçu avec le vrai chemin ({seen.get('check2')})")
+expect(any(k == "confirm" and "cmd /c exit 0" in t for k, t in events), "Tester : confirmation demandée avec la commande")
+expect(seen.get("test") and seen["test"][0].startswith("✓"), f"Tester : résultat affiché ({seen.get('test')})")
+cmds = cfg["cfgini_load_commands"](INI)
+expect(saved and [c for c, *_ in cmds] == [["curl", "--fail", "http://192.168.1.50/rpc/Switch.Set?id=0&on=true"],
+                                           ["cmd", "/c", "exit", "0"]], f"enregistré : {cmds}")
+
 log("ÉCHECS :", FAILS if FAILS else "aucun")
