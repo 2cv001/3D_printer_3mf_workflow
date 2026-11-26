@@ -317,6 +317,8 @@ TRANSLATIONS = {
                         "Petite valeur = plus de détails, mais fichier plus lourd.",
         "hint_positions": "Conserve la position XY sur le plateau.\n⚠️ Le Z est toujours recalculé pour éviter que l'objet soit sous le plateau.",
         "no_external_actions": "Pas encore de commandes utilisateur ajoutées.",
+        "before_export_tag": "(avant l'export)",
+        "before_export_wait": "Commande utilisateur dans {sec} s…",
         "hint_external_actions": "Vous pouvez ajouter ou modifier vos actions personnalisées en cliquant sur le bouton. ⚙️",
         "hint_generate_stl": "Génère aussi un fichier STL en plus du 3MF.",
         "hint_launch_slicer": (
@@ -499,6 +501,8 @@ TRANSLATIONS = {
         "hint_positions": "Keeps XY position on the build plate.\n⚠️  Z is always recalculated to prevent"
                           "the object from going below the build plate.",
         "no_external_actions": "No user commands added yet.",
+        "before_export_tag": "(before the export)",
+        "before_export_wait": "User command in {sec} s…",
         "hint_external_actions": "You can add or edit your custom actions by clicking the ⚙️ button.",
 
         "hint_generate_stl": "Also generates an STL file along with the 3MF.",
@@ -681,6 +685,8 @@ TRANSLATIONS = {
         "hint_positions": "Behält die XY-Position auf dem Druckbett bei.\n⚠️ Die Z-Position wird immer neu berechnet, "
                             "damit das Objekt nicht unter das Druckbett fällt.",
         "no_external_actions": "Es wurden noch keine benutzerdefinierten Befehle hinzugefügt.",
+        "before_export_tag": "(vor dem Export)",
+        "before_export_wait": "Benutzerbefehl in {sec} s…",
         "hint_external_actions": "Sie können Ihre eigenen Aktionen über die Schaltfläche ⚙️ hinzufügen oder bearbeiten.",
 
         "hint_generate_stl": "Erzeugt zusätzlich zur 3MF auch eine STL Datei.",
@@ -1050,28 +1056,37 @@ def rotate_old_backups(base_name, max_backups):
 ##############################################################
 # Charge les commandes externes définies dans le fichier ini
 def load_extra_commands_from_ini(path=INI_FILE):
+    """
+    Commandes utilisateur : liste de (cmd, label, delay, default, before).
+    Celles à lancer avant l'export sont dans une clé à part, EXTRA_COMMANDS_BEFORE
+    (une ancienne version de la macro les ignore simplement) ; elles viennent en premier.
+    """
     # interpolation=None : les commandes contiennent %PROJECT%, %EXPORT%…
     cfg = configparser.ConfigParser(interpolation=None)
+    commands = []
     try:
         cfg.read(path, encoding="utf-8")
-        if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
-            commands = []
-            for entry in ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"]):
+        if "extra_commands" not in cfg:
+            return []
+        section = cfg["extra_commands"]
+        for key, before in (("EXTRA_COMMANDS_BEFORE", True), ("EXTRA_COMMANDS", False)):
+            if key not in section:
+                continue
+            for entry in ast.literal_eval(section[key]):
                 try:
-                    cmd, label, delay, default = entry
+                    cmd, label, delay, default = entry[:4]
                     if isinstance(cmd, str):
                         cmd = split_command_line(cmd) or []
-                    commands.append((list(cmd), str(label), float(delay or 0), bool(default)))
+                    commands.append((list(cmd), str(label), float(delay or 0), bool(default), before))
                 except Exception as e:
-                    print("⚠️ EXTRA_COMMANDS entry ignored:", entry, e)
-            return commands
+                    print(f"⚠️ {key} entry ignored:", entry, e)
     except Exception as e:
         print("⚠️ Read error EXTRA_COMMANDS ini:", e)
-    return []
+    return commands
 
 
 # Commandes codées en dur (ci-dessus), gardées pour relire le .ini plus tard
-EXTRA_COMMANDS_BUILTIN = list(EXTRA_COMMANDS)
+EXTRA_COMMANDS_BUILTIN = [tuple(c[:4]) + (False,) for c in EXTRA_COMMANDS]
 
 
 def reload_extra_commands():
@@ -2108,11 +2123,11 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             lbl_ext = QtGui.QLabel(tr("external_actions"))
             lbl_ext.setToolTip(tr("hint_external_actions"))
             extra_layout.addWidget(lbl_ext)
-            for cmd, label, delay, default in EXTRA_COMMANDS:
-                chk = QtGui.QCheckBox(label)
+            for cmd, label, delay, default, before in EXTRA_COMMANDS:
+                chk = QtGui.QCheckBox(f"{label} {tr('before_export_tag')}" if before else label)
                 chk.setChecked(default)
                 extra_layout.addWidget(chk)
-                extra_checks.append((chk, cmd, delay))
+                extra_checks.append((chk, cmd, delay, before))
         else:
             # 👉 Afficher un libellé même si aucune commande n'est définie
             lbl_ext = QtGui.QLabel(tr("no_external_actions"))
@@ -2177,7 +2192,7 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
             linear_val,
             angular_rad,
             chk_ignore_transform.isChecked(),
-            [(chk.isChecked(), cmd, delay) for chk, cmd, delay in extra_checks],
+            [(chk.isChecked(), cmd, delay, before) for chk, cmd, delay, before in extra_checks],
         )
 
 
@@ -4364,9 +4379,11 @@ def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
     Lance le slicer si demandé par l’utilisateur.
     - Vérifie l’existence du chemin ou si c'est un commande valide
     - Ouvre le slicer avec le fichier 3MF
-    - Sinon affiche un message de fin
+    - Sinon prépare le message de fin
 
-    Ne retourne rien.
+    Renvoie le message à afficher (titre, texte) ou None. Il n'est pas affiché
+    ici : l'appelant lance d'abord les commandes utilisateur, que ce message
+    (modal) retarderait jusqu'au clic sur OK.
     """
     if DEBUGPIPE: print('Lancement du slicer', slicer_path)
     # Lancement demandé ?
@@ -4377,21 +4394,20 @@ def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
                 cmd = build_slicer_launch_command(slicer_path, fc_3mf)
                 subprocess.Popen(cmd)
             elif slicer_path:
-                show_message(tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
-                return
+                return (tr("error_title"), f"{tr('error_invalid_slicer')}\n{slicer_path}")
         except Exception as e:
-            show_message(tr("error_title"), f"{tr('error_launch_slicer')} {e}")
-        return
+            return (tr("error_title"), f"{tr('error_launch_slicer')} {e}")
+        return None
 
     # Si l’utilisateur n’a pas demandé le lancement
-    if not launch_slicer:
-        show_message(tr("info_title"), tr("info_done"))
+    return (tr("info_title"), tr("info_done"))
 
-def run_extra_commands(extra_cmds, project_path, export_basepath):
+def run_extra_commands(extra_cmds, project_path, export_basepath, before=False):
     """
     Exécute les commandes externes définies par l’utilisateur.
     project_path = chemin complet du projet FreeCAD, AVEC extension (.FCStd)
     export_basepath = chemin de l’export de l’objet, SANS extension
+    before = True : seulement les commandes « avant l'export », sinon seulement les autres.
     """
 
     if DEBUG:
@@ -4408,11 +4424,15 @@ def run_extra_commands(extra_cmds, project_path, export_basepath):
     # Nom du projet sans extension
     project_name = os.path.basename(project_basepath)
 
-    # Délais cumulés (chaque délai compte après la commande précédente), avec des
-    # minuteries Qt : FreeCAD n'est pas bloqué pendant l'attente.
+    # Commandes « après » : délais cumulés (chaque délai compte après la commande
+    # précédente), avec des minuteries Qt : FreeCAD n'est pas bloqué pendant l'attente.
+    # Commandes « avant » : la macro attend vraiment chaque délai, l'export ne
+    # démarre qu'après la dernière commande (ex. allumer la prise, attendre, chauffer).
     total_delay = 0.0
-    for checked, cmd, delay in extra_cmds:
-        if not checked:
+    for entry in extra_cmds:
+        checked, cmd, delay = entry[:3]
+        is_before = bool(entry[3]) if len(entry) > 3 else False
+        if not checked or is_before != before:
             continue
 
         # Substitution minimale
@@ -4427,14 +4447,40 @@ def run_extra_commands(extra_cmds, project_path, export_basepath):
         ]
 
         try:
-            total_delay += max(0.0, float(delay or 0))
+            delay = max(0.0, float(delay or 0))
         except (TypeError, ValueError):
-            pass
+            delay = 0.0
+        if before:
+            _wait_before_command(delay)
+            _launch_extra_command(cmd)
+            continue
+        total_delay += delay
         if total_delay <= 0:
             _launch_extra_command(cmd)
         else:
             QtCore.QTimer.singleShot(int(total_delay * 1000),
                                      lambda c=cmd: _launch_extra_command(c))
+
+
+def _wait_before_command(delay):
+    """Attend delay secondes en laissant FreeCAD réactif (barre d'état avec décompte)."""
+    if delay <= 0:
+        return
+    try:
+        bar = FreeCADGui.getMainWindow().statusBar()
+    except Exception:
+        bar = None
+    end = time.monotonic() + delay
+    while True:
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            break
+        if bar is not None:
+            bar.showMessage(tr("before_export_wait").format(sec=math.ceil(remaining)))
+        QtGui.QApplication.processEvents()
+        time.sleep(min(0.05, remaining))
+    if bar is not None:
+        bar.clearMessage()
 
 
 def _launch_extra_command(cmd):
@@ -4550,6 +4596,13 @@ def export_replace_geometry():
                   os.path.basename(old_3mf_backup))
 
     # ------------------------------------------------------------
+    # 6 bis) Commandes « avant l'export » : après les questions qui permettent
+    #        d'annuler ou de revenir aux options, juste avant le maillage
+    #        (allumer l'imprimante, préchauffer… pendant que FreeCAD maille)
+    # ------------------------------------------------------------
+    run_extra_commands(extra_cmds, project_path(doc), base_name, before=True)
+
+    # ------------------------------------------------------------
     # 7) Maillage FreeCAD (+ STL éventuel). Aucun 3MF écrit ici.
     # ------------------------------------------------------------
     t_mesh = time.perf_counter()
@@ -4588,12 +4641,16 @@ def export_replace_geometry():
     # ------------------------------------------------------------
     # 10) Lancement du slicer
     # ------------------------------------------------------------
-    launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf)
+    final_message = launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf)
 
     # ------------------------------------------------------------
-    # 11) Commandes externes
+    # 11) Commandes externes, AVANT le message de fin (modal : il les
+    #     retarderait jusqu'au clic sur OK)
     # ------------------------------------------------------------
     run_extra_commands(extra_cmds, project_path(doc), base_name)
+
+    if final_message:
+        show_message(*final_message)
 
 
 def run_macro():

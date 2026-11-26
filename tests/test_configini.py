@@ -108,7 +108,7 @@ text = open(INI, encoding="utf-8").read()
 expect("; commentaire gardé" in text and "[Autre]\ncle = valeur" in text and "D:/Données/a.3mf" in text,
        "le reste du fichier est gardé")
 expect("calc.exe" not in text and text.count("[extra_commands]") == 1, "ancienne section remplacée")
-expect(cfg["cfgini_load_commands"](INI) == [(list(c), l, d, df) for c, l, d, df in commands],
+expect(cfg["cfgini_load_commands"](INI) == [(list(c), l, d, df, False) for c, l, d, df in commands],
        "relu par ConfigIni à l'identique")
 main = load_main()
 main["INI_FILE"] = INI
@@ -400,5 +400,82 @@ expect(seen.get("test") and seen["test"][0].startswith("✓"), f"Tester : résul
 cmds = cfg["cfgini_load_commands"](INI)
 expect(saved and [c for c, *_ in cmds] == [["curl", "--fail", "http://192.168.1.50/rpc/Switch.Set?id=0&on=true"],
                                            ["cmd", "/c", "exit", "0"]], f"enregistré : {cmds}")
+
+# 11) Fin d'export : commandes lancées AVANT le message « terminé » (modal)
+import math, Part
+doc = FreeCAD.newDocument("Cfg")
+box = doc.addObject("Part::Feature", "A")
+box.Shape = Part.makeBox(10, 10, 10)
+doc.recompute()
+doc.saveAs(os.path.join(OUT, "proj.FCStd"))
+for launch, slicer, expected_msg in ((False, "", "info_done"),
+                                     (True, "C:/pas/de/slicer.exe", "error_invalid_slicer")):
+    order = []
+    ns = load_main()
+    ns["show_message"] = lambda t, m: order.append(("message", m))
+    ns["_launch_extra_command"] = lambda c: order.append(("command", c))
+    base = os.path.join(OUT, "A")
+    ns["prepare_environment"] = lambda: ({}, doc, [box], ["A"], base, base + ".3mf", base + ".old.3mf",
+                                         os.path.exists(base + ".3mf"))
+    ns["get_user_options"] = lambda *a: (False, slicer, "", launch, 0.1, math.radians(5), False,
+                                         [(True, ["x", "%EXPORTNAME%"], 0)])
+    ns["export_replace_geometry"]()
+    msg_text = ns["tr"](expected_msg)
+    expect([k for k, _ in order] == ["command", "message"] and order[0][1] == ["x", "A"]
+           and msg_text.split("\n")[0] in order[1][1],
+           f"lancer le slicer={launch} : commande puis message ({order})")
+
+# 12) Commandes « avant l'export »
+cmds5 = [(["avant1"], "Allumer", 0, True, True), (["apres1", "%EXPORTNAME%"], "Copier", 0, True, False),
+         (["avant2"], "Préchauffer", 0, False, True)]
+cfg["cfgini_save_commands"](cmds5, INI)
+import configparser as _cp, ast as _ast
+raw_ini = _cp.ConfigParser(interpolation=None)
+raw_ini.read(INI, encoding="utf-8")
+expect(_ast.literal_eval(raw_ini["extra_commands"]["EXTRA_COMMANDS"]) == [(["apres1", "%EXPORTNAME%"], "Copier", 0, True)],
+       "EXTRA_COMMANDS : seulement les commandes après l'export, en 4 éléments (anciennes versions)")
+expect(len(_ast.literal_eval(raw_ini["extra_commands"]["EXTRA_COMMANDS_BEFORE"])) == 2, "EXTRA_COMMANDS_BEFORE : 2 commandes")
+expect([c[4] for c in cfg["cfgini_load_commands"](INI)] == [True, True, False], "ConfigIni relit : avant en premier")
+main = load_main()
+got = main["load_extra_commands_from_ini"](INI)
+expect([(c[0][0], c[4]) for c in got] == [("avant1", True), ("avant2", True), ("apres1", False)],
+       f"macro principale relit le moment ({[(c[0][0], c[4]) for c in got]})")
+a = cfg["cfgini_analyze"]('cmd /c copy "%EXPORT%.3mf" x', values, windows=True, before=True)
+expect(any("pas encore écrit" in w for w in a["warnings"]), f"avant l'export + %EXPORT% : avertissement ({a['warnings']})")
+a = cfg["cfgini_analyze"]('cmd /c copy "%EXPORT%.3mf" x', values, windows=True, before=False)
+expect(not a["warnings"], "après l'export + %EXPORT% : pas d'avertissement")
+
+order = []
+ns = load_main()
+ns["show_message"] = lambda t, m: order.append(("message", None))
+ns["_launch_extra_command"] = lambda c: order.append(("command", c[0]))
+launch_times = {}
+_launch_cmd = ns["_launch_extra_command"]
+ns["_launch_extra_command"] = lambda c: (launch_times.__setitem__(c[0], time.monotonic()), _launch_cmd(c))
+real_export = ns["export_freecad_files"]
+ns["export_freecad_files"] = lambda *a, **k: (order.append(("mesh", None)), real_export(*a, **k))[1]
+base = os.path.join(OUT, "A")
+ns["prepare_environment"] = lambda: ({}, doc, [box], ["A"], base, base + ".3mf", base + ".old.3mf",
+                                     os.path.exists(base + ".3mf"))
+ns["get_user_options"] = lambda *a: (False, "", "", False, 0.1, math.radians(5), False,
+                                     [(True, ["avant1"], 0, True), (True, ["apres1"], 0, False),
+                                      (True, ["avant2"], 0.5, True), (False, ["avant3"], 0, True)])
+ns["export_replace_geometry"]()
+expect([k if v is None else v for k, v in order] == ["avant1", "avant2", "mesh", "apres1", "message"],
+       f"ordre : avant (avec délai attendu), maillage, après, message ({order})")
+gap = launch_times.get("avant2", 0) - launch_times.get("avant1", 0)
+expect(0.45 <= gap < 2, f"délai de 0,5 s attendu entre les deux commandes avant ({gap:.2f} s)")
+
+# Dialogue : case « Avant l'export » enregistrée
+events.clear()
+
+
+def tick_before(d):
+    d.findChild(QtGui.QTableWidget).cellWidget(2, 4).setChecked(True)  # « Copier » (3e ligne) passe avant
+
+
+drive_dialog([tick_before, press_ok])
+cfg["show_extra_commands_dialog"](None, INI)
+expect([c[4] for c in cfg["cfgini_load_commands"](INI)] == [True, True, True], "case cochée dans la fenêtre : enregistrée")
 
 log("ÉCHECS :", FAILS if FAILS else "aucun")

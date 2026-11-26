@@ -56,6 +56,8 @@ cfgini_TRANSLATIONS = {
         "col_label": "Label",
         "col_delay": "Délai (s)",
         "col_default": "Activé par défaut",
+        "col_before": "Avant l'export",
+        "hint_before": "Si coché, la commande est lancée avant le maillage, dès la validation des options (allumer l'imprimante, préchauffer…). Le 3MF n'est pas encore écrit à ce moment. La macro attend chaque délai : l'export ne démarre qu'après la dernière commande « avant ».",
         "hint_command": (
             "<b>Commande à exécuter :</b><br>"
             "Exemple simple : calc.exe<br>"
@@ -89,6 +91,8 @@ cfgini_TRANSLATIONS = {
         "col_label": "Label",
         "col_delay": "Delay (s)",
         "col_default": "Enabled by default",
+        "col_before": "Before the export",
+        "hint_before": "If checked, the command is run before the meshing, as soon as the options are validated (turn on the printer, preheat…). The 3MF is not written yet at that time. The macro waits for each delay: the export only starts after the last \"before\" command.",
         "hint_command": (
             "<b>Command to execute:</b><br>"
             "Simple example: calc.exe<br>"
@@ -122,6 +126,8 @@ cfgini_TRANSLATIONS = {
         "col_label": "Label",
         "col_delay": "Verzögerung (s)",
         "col_default": "Standardmäßig Aktiviert",
+        "col_before": "Vor dem Export",
+        "hint_before": "Wenn aktiviert, wird der Befehl vor der Vernetzung ausgeführt, sobald die Optionen bestätigt sind (Drucker einschalten, vorheizen…). Die 3MF ist zu diesem Zeitpunkt noch nicht geschrieben. Das Makro wartet jede Verzögerung ab: der Export startet erst nach dem letzten „vor“-Befehl.",
         "hint_command": (
             "<b>Befehl zum Ausführen:</b><br>"
             "Einfaches Beispiel: calc.exe<br>"
@@ -174,6 +180,7 @@ cfgini_EDITOR_TEXTS = {
         "tpl_open_folder": "Ouvrir le dossier du projet",
         "tpl_web": "Requête web (curl)",
         "tpl_shelly1": "Allumer une prise Shelly Gen 1",
+        "tpl_shelly1_pw": "Allumer une prise Shelly Gen 1 avec mot de passe",
         "tpl_shelly2": "Allumer une prise Shelly Gen 2",
         "tpl_shelly2_pw": "Allumer une prise Shelly Gen 2 avec mot de passe",
         "tpl_klipper": "Préchauffer le plateau à 60 °C (Klipper)",
@@ -182,6 +189,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_ip_plug": "IP_DE_LA_PRISE",
         "ph_ip_printer": "IP_DE_L_IMPRIMANTE",
         "ph_password": "MOT_DE_PASSE",
+        "ph_user": "UTILISATEUR",
         "ph_server": "ADRESSE_DU_SERVEUR",
         "ph_script": "MON_SCRIPT",
         "tpl_shelly_cloud": "Allumer une prise Shelly par le cloud (clé API)",
@@ -206,6 +214,7 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "Sous Windows, mettez des guillemets doubles \"…\" : les guillemets simples sont passés tels quels au programme ({arg}).",
         "chk_shell_op": "« {op} » ne fonctionne pas ici (la commande est lancée sans interpréteur) : pour l'utiliser, écrivez cmd /c … (Windows) ou sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} n'est pas une variable de la macro : elle restera telle quelle.",
+        "chk_before_export": "Commande lancée avant l'export : le 3MF n'est pas encore écrit (%EXPORT%.3mf est l'ancienne version, ou n'existe pas encore).",
         "test_title": "Tester la commande",
         "test_confirm": "Cette commande va vraiment être exécutée maintenant :\n\n{cmd}\n\nContinuer ?",
         "test_blocked": "La commande ne peut pas être lancée :\n\n{errors}",
@@ -240,6 +249,7 @@ cfgini_EDITOR_TEXTS = {
         "tpl_open_folder": "Open the project folder",
         "tpl_web": "Web request (curl)",
         "tpl_shelly1": "Turn on a Shelly Gen 1 plug",
+        "tpl_shelly1_pw": "Turn on a Shelly Gen 1 plug with password",
         "tpl_shelly2": "Turn on a Shelly Gen 2 plug",
         "tpl_shelly2_pw": "Turn on a Shelly Gen 2 plug with password",
         "tpl_klipper": "Preheat the bed to 60 °C (Klipper)",
@@ -248,6 +258,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_ip_plug": "PLUG_IP",
         "ph_ip_printer": "PRINTER_IP",
         "ph_password": "PASSWORD",
+        "ph_user": "USER",
         "ph_server": "SERVER_ADDRESS",
         "ph_script": "MY_SCRIPT",
         "tpl_shelly_cloud": "Turn on a Shelly plug through the cloud (API key)",
@@ -272,6 +283,7 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "On Windows, use double quotes \"…\": single quotes are passed as is to the program ({arg}).",
         "chk_shell_op": "\"{op}\" does not work here (the command is run without a shell): to use it, write cmd /c … (Windows) or sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} is not a variable of the macro: it will be left as is.",
+        "chk_before_export": "Command run before the export: the 3MF is not written yet (%EXPORT%.3mf is the previous version, or does not exist yet).",
         "test_title": "Test the command",
         "test_confirm": "This command will really be run now:\n\n{cmd}\n\nContinue?",
         "test_blocked": "The command cannot be run:\n\n{errors}",
@@ -306,6 +318,7 @@ cfgini_EDITOR_TEXTS = {
         "tpl_open_folder": "Projektordner öffnen",
         "tpl_web": "Web-Anfrage (curl)",
         "tpl_shelly1": "Shelly-Steckdose Gen 1 einschalten",
+        "tpl_shelly1_pw": "Shelly-Steckdose Gen 1 mit Passwort einschalten",
         "tpl_shelly2": "Shelly-Steckdose Gen 2 einschalten",
         "tpl_shelly2_pw": "Shelly-Steckdose Gen 2 mit Passwort einschalten",
         "tpl_klipper": "Druckbett auf 60 °C vorheizen (Klipper)",
@@ -314,6 +327,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_ip_plug": "IP_DER_STECKDOSE",
         "ph_ip_printer": "DRUCKER_IP",
         "ph_password": "PASSWORT",
+        "ph_user": "BENUTZER",
         "ph_server": "SERVERADRESSE",
         "ph_script": "MEIN_SKRIPT",
         "tpl_shelly_cloud": "Shelly-Steckdose über die Cloud einschalten (API-Schlüssel)",
@@ -338,6 +352,7 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "Unter Windows doppelte Anführungszeichen \"…\" verwenden: einfache werden unverändert an das Programm übergeben ({arg}).",
         "chk_shell_op": "„{op}“ funktioniert hier nicht (der Befehl wird ohne Shell gestartet): schreiben Sie dafür cmd /c … (Windows) oder sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} ist keine Variable des Makros: sie bleibt unverändert.",
+        "chk_before_export": "Befehl vor dem Export: die 3MF ist noch nicht geschrieben (%EXPORT%.3mf ist die alte Version oder existiert noch nicht).",
         "test_title": "Befehl testen",
         "test_confirm": "Dieser Befehl wird jetzt wirklich ausgeführt:\n\n{cmd}\n\nFortfahren?",
         "test_blocked": "Der Befehl kann nicht gestartet werden:\n\n{errors}",
@@ -519,7 +534,7 @@ def cfgini_find_program(program):
     return shutil.which(program)
 
 
-def cfgini_analyze(text, values, windows=None):
+def cfgini_analyze(text, values, windows=None, before=False):
     """
     Analyse une ligne de commande. Renvoie un dict :
       parts : arguments après remplacement des variables (None si la ligne est vide ou invalide)
@@ -552,6 +567,9 @@ def cfgini_analyze(text, values, windows=None):
             result["errors"].append(tr("chk_builtin").format(word=program))
         elif not re.search(r"<[^<>\"]+>", program):
             result["errors"].append(tr("chk_not_found").format(prog=program))
+
+    if before and "%EXPORT" in text:
+        result["warnings"].append(tr("chk_before_export"))
 
     placeholders = sorted(set(re.findall(r"<[^<>\"\s]+>", text)))
     if placeholders:
@@ -625,6 +643,8 @@ def cfgini_templates(windows=None):
         ("tpl_open_folder", open_cmd),
         ("tpl_web", f'curl --fail "http://{ph("ph_server")}/api?job=%PROJECTNAME%"'),
         ("tpl_shelly1", f'curl --fail "http://{plug}/relay/0?turn=on"'),
+        ("tpl_shelly1_pw", f'curl --fail -u {ph("ph_user")}:{ph("ph_password")} '
+                           f'"http://{plug}/relay/0?turn=on"'),
         ("tpl_shelly2", f'curl --fail "http://{plug}/rpc/Switch.Set?id=0&on=true"'),
         ("tpl_shelly2_pw", f'curl --fail --anyauth -u admin:{ph("ph_password")} '
                            f'"http://{plug}/rpc/Switch.Set?id=0&on=true"'),
@@ -684,21 +704,28 @@ def cfgini_test_message(parts, outcome, timeout=3.0):
 # Fonctions INI
 # -------------------------
 def cfgini_load_commands(path=None):
-    """Commandes de la section [extra_commands]. Lève une exception si le fichier est illisible."""
+    """
+    Commandes de la section [extra_commands] : liste de (cmd, label, delay, default, before),
+    celles « avant l'export » (clé EXTRA_COMMANDS_BEFORE) en premier.
+    Lève une exception si le fichier est illisible.
+    """
     path = path or cfgini_INI_FILE
     if not os.path.exists(path):
         return []
     cfg = configparser.ConfigParser(interpolation=None)
     cfg.read(path, encoding="utf-8")
-    if "extra_commands" not in cfg or "EXTRA_COMMANDS" not in cfg["extra_commands"]:
+    if "extra_commands" not in cfg:
         return []
-    commands = ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
+    section = cfg["extra_commands"]
     result = []
-    for entry in commands:
-        cmd, label, delay, default = entry
-        if isinstance(cmd, str):
-            cmd = cfgini_split_command(cmd)
-        result.append((list(cmd), str(label), delay, bool(default)))
+    for key, before in (("EXTRA_COMMANDS_BEFORE", True), ("EXTRA_COMMANDS", False)):
+        if key not in section:
+            continue
+        for entry in ast.literal_eval(section[key]):
+            cmd, label, delay, default = entry[:4]
+            if isinstance(cmd, str):
+                cmd = cfgini_split_command(cmd)
+            result.append((list(cmd), str(label), delay, bool(default), before))
     return result
 
 
@@ -706,6 +733,8 @@ def cfgini_save_commands(commands, path=None):
     """
     Réécrit seulement la section [extra_commands] ; le reste du fichier
     (réglages, commentaires) est gardé tel quel.
+    commands : (cmd, label, delay, default[, before]). Les commandes « avant l'export »
+    vont dans EXTRA_COMMANDS_BEFORE, que les anciennes versions de la macro ignorent.
     """
     path = path or cfgini_INI_FILE
     lines = []
@@ -713,8 +742,13 @@ def cfgini_save_commands(commands, path=None):
         with open(path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 
-    body = "[\n" + "".join(f"    {tuple(c)!r},\n" for c in commands) + "    ]"
-    section = ["[extra_commands]\n", "EXTRA_COMMANDS = " + body + "\n"]
+    after = [tuple(c[:4]) for c in commands if not (len(c) > 4 and c[4])]
+    before = [tuple(c[:4]) for c in commands if len(c) > 4 and c[4]]
+    body = lambda cmds: "[\n" + "".join(f"    {c!r},\n" for c in cmds) + "    ]"
+    section = ["[extra_commands]\n"]
+    if before:
+        section.append("EXTRA_COMMANDS_BEFORE = " + body(before) + "\n")
+    section.append("EXTRA_COMMANDS = " + body(after) + "\n")
 
     new_lines, in_extra, written = [], False, False
     for line in lines:
@@ -742,7 +776,9 @@ def cfgini_save_commands(commands, path=None):
     # Vérification : le fichier obtenu doit se relire à l'identique
     check = configparser.ConfigParser(interpolation=None)
     check.read_string("".join(new_lines))
-    if ast.literal_eval(check["extra_commands"]["EXTRA_COMMANDS"]) != [tuple(c) for c in commands]:
+    sec = check["extra_commands"]
+    if (ast.literal_eval(sec["EXTRA_COMMANDS"]) != after
+            or ast.literal_eval(sec.get("EXTRA_COMMANDS_BEFORE", "[]")) != before):
         raise ValueError("EXTRA_COMMANDS")
 
     tmp = path + ".tmp"
@@ -785,31 +821,37 @@ def show_extra_commands_dialog(parent=None, path=None):
     layout = QtGui.QVBoxLayout()
 
     table = QtGui.QTableWidget()
-    table.setColumnCount(4)
+    table.setColumnCount(5)
     table.setWordWrap(True)
 
     table.setHorizontalHeaderLabels([
         tr("col_command"),
         tr("col_label"),
         tr("col_delay"),
-        tr("col_default")
+        tr("col_default"),
+        tr("col_before"),
     ])
     # Tooltips sur les en-têtes (Qt4-compatible)
     table.horizontalHeaderItem(0).setToolTip(tr("hint_command"))
     table.horizontalHeaderItem(1).setToolTip(tr("hint_label"))
     table.horizontalHeaderItem(2).setToolTip(tr("hint_delay"))
     table.horizontalHeaderItem(3).setToolTip(tr("hint_default"))
+    table.horizontalHeaderItem(4).setToolTip(tr("hint_before"))
 
     header = table.horizontalHeader()
     header.setResizeMode(0, QtGui.QHeaderView.Stretch)  # Commande = flexible
     header.setResizeMode(1, QtGui.QHeaderView.Interactive)  # Label redimensionnable
     header.setResizeMode(2, QtGui.QHeaderView.ResizeToContents)
     header.setResizeMode(3, QtGui.QHeaderView.ResizeToContents)
+    header.setResizeMode(4, QtGui.QHeaderView.ResizeToContents)
 
     # Permettre de redimensionner la hauteur des lignes
     table.verticalHeader().setResizeMode(QtGui.QHeaderView.Interactive)
 
-    def add_row(cmd_text="", label=None, delay=0, default=False):
+    # Rappel de la vérification quand on coche « Avant l'export » (définie plus bas)
+    hooks = {"check": lambda: None}
+
+    def add_row(cmd_text="", label=None, delay=0, default=False, before=False):
         row = table.rowCount()
         table.insertRow(row)
 
@@ -830,11 +872,17 @@ def show_extra_commands_dialog(parent=None, path=None):
         chk.setChecked(bool(default))
         table.setCellWidget(row, 3, chk)
 
+        chk_before = QtGui.QCheckBox()
+        chk_before.setChecked(bool(before))
+        chk_before.setToolTip(tr("hint_before"))
+        chk_before.toggled.connect(lambda *a: hooks["check"]())
+        table.setCellWidget(row, 4, chk_before)
+
         table.resizeRowsToContents()
         return row
 
-    for cmd, label, delay, default in commands:
-        add_row(cfgini_join_command(cmd), label, delay, default)
+    for cmd, label, delay, default, before in commands:
+        add_row(cfgini_join_command(cmd), label, delay, default, before)
 
     # Agrandir la colonne Label (colonne 1)
     table.setColumnWidth(1, table.columnWidth(1) * 2)
@@ -891,11 +939,17 @@ def show_extra_commands_dialog(parent=None, path=None):
         r = table.currentRow()
         return r if 0 <= r < table.rowCount() else -1
 
+    def row_is_before(r):
+        w = table.cellWidget(r, 4) if r >= 0 else None
+        return bool(w is not None and w.isChecked())
+
     def update_check():
-        analysis = cfgini_analyze(cmd_edit.text(), values)
+        analysis = cfgini_analyze(cmd_edit.text(), values, before=row_is_before(current_row()))
         lbl_check.setText(cfgini_check_html(analysis, example))
         btn_test.setEnabled(current_row() >= 0 and bool(analysis["parts"]))
         return analysis
+
+    hooks["check"] = update_check
 
     def load_editor():
         r = current_row()
@@ -1098,7 +1152,7 @@ def show_extra_commands_dialog(parent=None, path=None):
             chk = table.cellWidget(row, 3)
             default = chk.isChecked() if chk is not None else False
             if cmd:
-                new_cmds.append((cmd, cell_text(row, 1), delay, default))
+                new_cmds.append((cmd, cell_text(row, 1), delay, default, row_is_before(row)))
         try:
             cfgini_save_commands(new_cmds, path)
         except Exception as e:

@@ -97,7 +97,7 @@ The ⚙️ button in the options window allows you to both install and open the 
 - **Add from a template** creates a ready-made command (copy the 3MF, open the project folder, web request, Shelly plug — local, with password or through the Shelly cloud with an API key —, Home Assistant, Jeedom, Klipper preheating, Python script); the part to replace, such as `<PLUG_IP>`, is selected: just type.
 - Under the table, the command of the selected row can be edited with **Browse…** (inserts the path of a program or file) and **Insert a variable** (`%EXPORT%.3mf`…). A check shows whether the program is found, how the command is split into parameters (with the real paths of the export), and the usual mistakes (command built into Windows such as `copy`, part left to replace, unclosed quote…).
 - **Test** runs the command right away (after confirmation) and tells whether it succeeded.
-- Each command you define will be executed in order after the 3MF file is produced. The delay of a command counts from the previous command; FreeCAD is not blocked while waiting.
+- Each command you define will be executed in order after the 3MF file is produced (before the end message), or, if **Before the export** is checked, as soon as the options are validated, before the meshing (to turn on the printer or preheat; the 3MF is not written yet then). The delay of a command counts from the previous command. For "after" commands, FreeCAD is not blocked while waiting; for "before" commands, the macro waits for each delay (countdown in the status bar) and the export only starts after the last one.
 - Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
 - Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them.
 
@@ -145,6 +145,12 @@ Turn on a Shelly smart plug Gen 1:
 
 ```bash
 curl "http://192.168.xxx.xxx/relay/0?turn=on"
+```
+
+Gen 1 with a password (restricted login):
+
+```bash
+curl -u <USER>:<PASSWORD> "http://192.168.xxx.xxx/relay/0?turn=on"
 ```
 
 Gen 2:
