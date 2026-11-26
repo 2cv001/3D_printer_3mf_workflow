@@ -25,7 +25,8 @@ cfgini_PLACEHOLDERS = {
         "%PROJECTDIR% : dossier du projet<br>"
         "%PROJECTNAME% : nom du projet, sans extension<br>"
         "%EXPORT% : chemin complet de l'export, sans extension (le 3MF est %EXPORT%.3mf)<br>"
-        "%EXPORTNAME% : nom de l'export, sans extension<br><br>"
+        "%EXPORTNAME% : nom de l'export, sans extension<br>"
+        "%DATETIME% : date et heure de l'export, utilisables dans un nom de fichier (2026-11-26_22-10)<br><br>"
         "Mettre entre guillemets doubles un argument qui contient des espaces : "
         "\"%EXPORT%.3mf\""
     ),
@@ -35,7 +36,8 @@ cfgini_PLACEHOLDERS = {
         "%PROJECTDIR%: project folder<br>"
         "%PROJECTNAME%: project name, without extension<br>"
         "%EXPORT%: full path of the export, without extension (the 3MF is %EXPORT%.3mf)<br>"
-        "%EXPORTNAME%: export name, without extension<br><br>"
+        "%EXPORTNAME%: export name, without extension<br>"
+        "%DATETIME%: date and time of the export, usable in a file name (2026-11-26_22-10)<br><br>"
         "Put an argument containing spaces between double quotes: \"%EXPORT%.3mf\""
     ),
     "de": (
@@ -44,7 +46,8 @@ cfgini_PLACEHOLDERS = {
         "%PROJECTDIR%: Projektordner<br>"
         "%PROJECTNAME%: Projektname, ohne Endung<br>"
         "%EXPORT%: vollständiger Pfad des Exports, ohne Endung (die 3MF ist %EXPORT%.3mf)<br>"
-        "%EXPORTNAME%: Name des Exports, ohne Endung<br><br>"
+        "%EXPORTNAME%: Name des Exports, ohne Endung<br>"
+        "%DATETIME%: Datum und Uhrzeit des Exports, in Dateinamen verwendbar (2026-11-26_22-10)<br><br>"
         "Ein Argument mit Leerzeichen in doppelte Anführungszeichen setzen: \"%EXPORT%.3mf\""
     ),
 }
@@ -184,6 +187,7 @@ cfgini_EDITOR_TEXTS = {
         "var_project": "chemin complet du projet FreeCAD, sans extension",
         "var_projectdir": "chemin complet du dossier du projet",
         "var_projectname": "nom seul du projet (sans dossier ni extension)",
+        "var_datetime": "date et heure de l'export (année-mois-jour_heure-minute)",
         "tpl_program": "Lancer un programme…",
         "tpl_copy": "Copier le 3MF dans un dossier",
         "tpl_open_folder": "Ouvrir le dossier du projet",
@@ -298,6 +302,7 @@ cfgini_EDITOR_TEXTS = {
         "var_project": "full path of the FreeCAD project, without extension",
         "var_projectdir": "full path of the project folder",
         "var_projectname": "name of the project only (no folder, no extension)",
+        "var_datetime": "date and time of the export (year-month-day_hour-minute)",
         "tpl_program": "Run a program…",
         "tpl_copy": "Copy the 3MF to a folder",
         "tpl_open_folder": "Open the project folder",
@@ -412,6 +417,7 @@ cfgini_EDITOR_TEXTS = {
         "var_project": "vollständiger Pfad des FreeCAD-Projekts, ohne Endung",
         "var_projectdir": "vollständiger Pfad des Projektordners",
         "var_projectname": "nur der Projektname (ohne Ordner und Endung)",
+        "var_datetime": "Datum und Uhrzeit des Exports (Jahr-Monat-Tag_Stunde-Minute)",
         "tpl_program": "Ein Programm starten…",
         "tpl_copy": "Die 3MF in einen Ordner kopieren",
         "tpl_open_folder": "Projektordner öffnen",
@@ -616,7 +622,9 @@ def cfgini_parse_delay(text):
 # -------------------------
 # Aide à la saisie : chemins, vérification, modèles, test
 # -------------------------
-cfgini_VARIABLES = ("%PROJECT%", "%PROJECTDIR%", "%PROJECTNAME%", "%EXPORT%", "%EXPORTNAME%")
+cfgini_VARIABLES = ("%PROJECT%", "%PROJECTDIR%", "%PROJECTNAME%", "%EXPORT%", "%EXPORTNAME%", "%DATETIME%")
+# Format de %DATETIME% : sans « : » ni « / », interdits dans un nom de fichier Windows ; trié par date
+cfgini_DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
 # Commandes internes de l'invite de commandes Windows (pas des programmes)
 cfgini_WINDOWS_BUILTINS = {
@@ -658,6 +666,7 @@ def cfgini_context():
         "%PROJECTNAME%": os.path.basename(project),
         "%EXPORT%": export,
         "%EXPORTNAME%": os.path.basename(export),
+        "%DATETIME%": time.strftime(cfgini_DATETIME_FORMAT),
     }, example
 
 
@@ -668,6 +677,7 @@ def cfgini_substitute(parts, values):
              .replace("%PROJECTNAME%", values["%PROJECTNAME%"])
              .replace("%EXPORT%", values["%EXPORT%"])
              .replace("%EXPORTNAME%", values["%EXPORTNAME%"])
+             .replace("%DATETIME%", values.get("%DATETIME%", time.strftime(cfgini_DATETIME_FORMAT)))
             for p in parts]
 
 
@@ -1505,7 +1515,8 @@ def show_extra_commands_dialog(parent=None, path=None):
 
     for var, key in (("%EXPORT%.3mf", "var_export3mf"), ("%EXPORT%", "var_export"),
                      ("%EXPORTNAME%", "var_exportname"), ("%PROJECT%", "var_project"),
-                     ("%PROJECTDIR%", "var_projectdir"), ("%PROJECTNAME%", "var_projectname")):
+                     ("%PROJECTDIR%", "var_projectdir"), ("%PROJECTNAME%", "var_projectname"),
+                     ("%DATETIME%", "var_datetime")):
         sample = cfgini_substitute([var], values)[0]
         shown = sample if len(sample) <= 60 else sample[:25] + "…" + sample[-32:]
         action = menu_vars.addAction(f"{var}   —   {tr(key)}   →   {shown}")

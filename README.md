@@ -149,6 +149,7 @@ Custom post-processing commands can refer to both the FreeCAD project and the ex
 | `%PROJECTNAME%` | Project file name without extension |
 | `%EXPORT%` | Full path of the export (named after the selected objects) without extension |
 | `%EXPORTNAME%` | Export file name without extension |
+| `%DATETIME%` | Date and time of the export, usable in a file name: `2026-11-26_22-10` (year-month-day_hour-minute; the same for all the commands of an export) |
 
 ### Examples
 
@@ -158,6 +159,12 @@ Copy the generated 3MF file into a `backup` folder of the project (Windows; the 
 
 ```bash
 cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\backup\%EXPORTNAME%.3mf"
+```
+
+Keep a dated copy of each export (`Body_2026-11-26_22-10.3mf`):
+
+```bash
+cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\backup\%EXPORTNAME%_%DATETIME%.3mf"
 ```
 
 On Linux / macOS:

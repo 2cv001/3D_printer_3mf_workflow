@@ -515,6 +515,25 @@ expect([k if v is None else v for k, v in order] == ["avant1", "avant2", "mesh",
 gap = launch_times.get("avant2", 0) - launch_times.get("avant1", 0)
 expect(0.45 <= gap < 2, f"délai de 0,5 s attendu entre les deux commandes avant ({gap:.2f} s)")
 
+# %DATETIME% : même valeur avant et après l'export, utilisable dans un nom de fichier
+dated = []
+ns = load_main()
+ns["show_message"] = lambda t, m: None
+ns["_launch_extra_command"] = lambda c: dated.append(c)
+ns["prepare_environment"] = lambda: ({}, doc, [box], ["A"], base, base + ".3mf", base + ".old.3mf",
+                                     os.path.exists(base + ".3mf"))
+ns["get_user_options"] = lambda *a: (False, "", "", False, 0.1, math.radians(5), False,
+                                     [(True, ["avant", r"C:\svg\%EXPORTNAME%_%DATETIME%.3mf"], 0, True),
+                                      (True, ["apres", "%DATETIME%"], 0, False)])
+ns["export_replace_geometry"]()
+stamps = [c[1][-20:-4] for c in dated if c[0] == "avant"] + [c[1] for c in dated if c[0] == "apres"]
+expect(len(stamps) == 2 and stamps[0] == stamps[1] and re.fullmatch(r"\d{4}-\d\d-\d\d_\d\d-\d\d", stamps[1]),
+       f"%DATETIME% identique avant et après, format AAAA-MM-JJ_HH-MM ({dated})")
+expect(dated and dated[0][1] == r"C:\svg\A_" + stamps[0] + ".3mf", f"%DATETIME% dans un nom de fichier ({dated[:1]})")
+a = cfg["cfgini_analyze"](r'cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\%EXPORTNAME%_%DATETIME%.3mf"', values, windows=True)
+expect(not a["warnings"] and re.search(r"Body_\d{4}-\d\d-\d\d_\d\d-\d\d\.3mf$", a["parts"][-1]),
+       f"ConfigIni : %DATETIME% connu et remplacé ({a['warnings']}, {a['parts'][-1:]})")
+
 # Dialogue : case « Avant l'export » enregistrée
 events.clear()
 

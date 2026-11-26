@@ -4402,13 +4402,16 @@ def launch_slicer_if_needed(slicer_path, launch_slicer, fc_3mf):
     # Si l’utilisateur n’a pas demandé le lancement
     return (tr("info_title"), tr("info_done"))
 
-def run_extra_commands(extra_cmds, project_path, export_basepath, before=False):
+def run_extra_commands(extra_cmds, project_path, export_basepath, before=False, stamp=None):
     """
     Exécute les commandes externes définies par l’utilisateur.
     project_path = chemin complet du projet FreeCAD, AVEC extension (.FCStd)
     export_basepath = chemin de l’export de l’objet, SANS extension
     before = True : seulement les commandes « avant l'export », sinon seulement les autres.
+    stamp = valeur de %DATETIME% (la même pour toutes les commandes d'un export)
     """
+    if stamp is None:
+        stamp = time.strftime(EXTRA_DATETIME_FORMAT)
 
     if DEBUG:
         print('Lancement commandes utilisateur')
@@ -4443,6 +4446,7 @@ def run_extra_commands(extra_cmds, project_path, export_basepath, before=False):
                 .replace("%PROJECTNAME%", project_name)
                 .replace("%EXPORT%", export_basepath)
                 .replace("%EXPORTNAME%", os.path.basename(export_basepath))
+                .replace("%DATETIME%", stamp)
             for part in cmd
         ]
 
@@ -4460,6 +4464,10 @@ def run_extra_commands(extra_cmds, project_path, export_basepath, before=False):
         else:
             QtCore.QTimer.singleShot(int(total_delay * 1000),
                                      lambda c=cmd: _launch_extra_command(c))
+
+
+# %DATETIME% : sans « : » ni « / », interdits dans un nom de fichier Windows ; trié par date
+EXTRA_DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
 
 def _wait_before_command(delay):
@@ -4525,6 +4533,9 @@ def export_replace_geometry():
     (generate_stl,
      slicer_path, base3mf_path, launch_slicer,
      linear_value, angular_value, ignore_transform, extra_cmds) = opts
+    # %DATETIME% des commandes utilisateur : l'heure de validation des options,
+    # la même pour les commandes avant et après l'export
+    stamp = time.strftime(EXTRA_DATETIME_FORMAT)
 
     # Maillage très fin : on prévient avant de bloquer FreeCAD longtemps.
     # « Revenir aux options » rouvre la fenêtre (rien n'a encore été écrit).
@@ -4600,7 +4611,7 @@ def export_replace_geometry():
     #        d'annuler ou de revenir aux options, juste avant le maillage
     #        (allumer l'imprimante, préchauffer… pendant que FreeCAD maille)
     # ------------------------------------------------------------
-    run_extra_commands(extra_cmds, project_path(doc), base_name, before=True)
+    run_extra_commands(extra_cmds, project_path(doc), base_name, before=True, stamp=stamp)
 
     # ------------------------------------------------------------
     # 7) Maillage FreeCAD (+ STL éventuel). Aucun 3MF écrit ici.
@@ -4647,7 +4658,7 @@ def export_replace_geometry():
     # 11) Commandes externes, AVANT le message de fin (modal : il les
     #     retarderait jusqu'au clic sur OK)
     # ------------------------------------------------------------
-    run_extra_commands(extra_cmds, project_path(doc), base_name)
+    run_extra_commands(extra_cmds, project_path(doc), base_name, stamp=stamp)
 
     if final_message:
         show_message(*final_message)
