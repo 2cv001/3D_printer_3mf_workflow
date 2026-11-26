@@ -309,8 +309,26 @@ def button(d, text):
     return [b for b in d.findChildren(QtGui.QPushButton) if b.text() == text][0]
 
 
+def fill_dialog():
+    found = [w for w in QtGui.QApplication.topLevelWidgets()
+             if isinstance(w, QtGui.QDialog) and w.objectName() == "cfgini_fill" and w.isVisible()]
+    return found[0] if found else None
+
+
+def cancel_fill():
+    """La fenêtre « Compléter » s'ouvre après le choix du modèle : on note ses cases et on annule."""
+    f = fill_dialog()
+    if f is None:
+        QtCore.QTimer.singleShot(20, cancel_fill)
+        return
+    seen["fill_fields"] = [e.objectName() for e in f.findChildren(QtGui.QLineEdit)]
+    seen["fill_labels"] = [l.text() for l in f.findChildren(QtGui.QLabel)]
+    f.reject()
+
+
 def use_template(d):
     actions = button(d, "Ajouter un modèle").menu().actions()
+    QtCore.QTimer.singleShot(20, cancel_fill)
     [a for a in actions if a.text().startswith("Allumer une prise Shelly Gen 2")][0].trigger()
     edit = d.findChild(QtGui.QLineEdit)
     seen["selected"] = edit.selectedText()
@@ -383,6 +401,8 @@ events.clear()
 drive_dialog_yes([use_template, add_with_variable, read_test, press_ok])
 saved = cfg["show_extra_commands_dialog"](None, INI)
 log("fenêtre :", seen, events)
+expect(seen.get("fill_fields") == ["fill_IP_DE_LA_PRISE"], f"modèle : fenêtre Compléter ouverte avec une case ({seen.get('fill_fields')})")
+expect("Adresse de la prise" in seen.get("fill_labels", []), f"fenêtre Compléter : libellé ({seen.get('fill_labels')})")
 expect(seen.get("selected") == "<IP_DE_LA_PRISE>", f"modèle : la partie à remplacer est sélectionnée ({seen.get('selected')})")
 expect(seen.get("after_ip") == 'curl --fail "http://192.168.1.50/rpc/Switch.Set?id=0&on=true"'
        and seen.get("cell") == seen.get("after_ip"), f"saisie recopiée dans le tableau ({seen.get('cell')})")
@@ -506,6 +526,65 @@ def tick_before(d):
 drive_dialog([tick_before, press_ok])
 cfg["show_extra_commands_dialog"](None, INI)
 expect([c[4] for c in cfg["cfgini_load_commands"](INI)] == [True, True, True], "case cochée dans la fenêtre : enregistrée")
+
+# 13) Compléter les parties <…>
+fill = cfg["cfgini_fill_command"]
+chk_fill = cfg["cfgini_check_fill_value"]
+tpl = dict(cfg["cfgini_templates"](windows=True))
+c = tpl["tpl_shelly2_pw"]
+expect(cfg["cfgini_placeholders"](c) == ["<MOT_DE_PASSE>", "<IP_DE_LA_PRISE>"], f"parties à remplir ({cfg['cfgini_placeholders'](c)})")
+expect(cfg["cfgini_placeholder_key"]("<IP_DE_LA_PRISE>") == "ph_ip_plug", "partie reconnue")
+expect(fill(c, {"<MOT_DE_PASSE>": "abc", "<IP_DE_LA_PRISE>": "192.168.1.5"}) ==
+       'curl --fail --anyauth -u admin:abc "http://192.168.1.5/rpc/Switch.Set?id=0&on=true"', "remplissage simple")
+got = fill(c, {"<MOT_DE_PASSE>": "a b", "<IP_DE_LA_PRISE>": ""})
+expect(got == 'curl --fail --anyauth -u admin:"a b" "http://<IP_DE_LA_PRISE>/rpc/Switch.Set?id=0&on=true"', f"espace hors guillemets → guillemets, case vide gardée ({got})")
+expect(split(got, windows=True)[4] == "admin:a b", f"mot de passe avec espace : un seul paramètre ({split(got, windows=True)})")
+got = fill(tpl["tpl_copy"], {"<DOSSIER_DE_DESTINATION>": r"D:\Mes sauvegardes"})
+expect(got == r'cmd /c copy /y "%EXPORT%.3mf" "D:\Mes sauvegardes\%EXPORTNAME%.3mf"', f"espace déjà entre guillemets ({got})")
+expect(chk_fill("ph_ip_plug", "shellyplug-s-1234.local") is None, "nom d'hôte accepté")
+expect(chk_fill("ph_ip_plug", "192.168.1.5") is None, "IP acceptée")
+for bad in ("http://192.168.1.5", "192.168.1.5/", "192.168.1.5:80", "192.168 .1.5"):
+    expect(chk_fill("ph_ip_plug", bad) is not None, f"adresse refusée : {bad}")
+expect(chk_fill("ph_jeedom", "192.168.1.9/jeedom") is None, "Jeedom dans un sous-dossier accepté")
+expect(chk_fill("ph_token", "abc def") is not None and chk_fill("ph_password", "a b") is None, "espace : refusé dans un jeton, accepté dans un mot de passe")
+expect(cfg["cfgini_clean_fill_value"]("ph_entity", " switch.prise ") == "prise", "« switch. » retiré")
+
+cfg["cfgini_save_commands"]([], INI)
+fill_seen = {}
+
+
+def fill_in():
+    f = fill_dialog()
+    if f is None:
+        QtCore.QTimer.singleShot(20, fill_in)
+        return
+    ok_btn = f.findChild(QtGui.QDialogButtonBox).button(QtGui.QDialogButtonBox.Ok)
+    ip = f.findChild(QtGui.QLineEdit, "fill_IP_DE_LA_PRISE")
+    ip.setText("http://192.168.1.5")
+    fill_seen["ok_disabled"] = not ok_btn.isEnabled()
+    fill_seen["error"] = [l.text() for l in f.findChildren(QtGui.QLabel) if "http://" in l.text() and "Mettez" in l.text()]
+    ip.setText("shelly.local")
+    f.findChild(QtGui.QLineEdit, "fill_MOT_DE_PASSE").setText("secret")
+    fill_seen["preview"] = f.findChild(QtGui.QLabel, "fill_preview").text()
+    ok_btn.click()
+
+
+def use_template_fill(d):
+    QtCore.QTimer.singleShot(20, fill_in)
+    [a for a in button(d, "Ajouter un modèle").menu().actions()
+     if a.text().startswith("Allumer une prise Shelly Gen 2 avec")][0].trigger()
+    fill_seen["cell"] = d.findChild(QtGui.QTableWidget).item(0, 0).text()
+    fill_seen["fill_enabled"] = button(d, "Compléter…").isEnabled()
+
+
+drive_dialog([use_template_fill, press_ok])
+cfg["show_extra_commands_dialog"](None, INI)
+expect(fill_seen.get("ok_disabled") and fill_seen.get("error"), f"http:// refusé, OK grisé ({fill_seen})")
+expect(fill_seen.get("cell") == 'curl --fail --anyauth -u admin:secret "http://shelly.local/rpc/Switch.Set?id=0&on=true"',
+       f"commande complétée dans le tableau ({fill_seen.get('cell')})")
+expect(fill_seen.get("fill_enabled") is False, "plus rien à compléter : bouton Compléter grisé")
+expect(fill_seen.get("preview") == fill_seen.get("cell"), f"aperçu = commande obtenue, sans &quot; ({fill_seen.get('preview')})")
+expect(cfg["cfgini_load_commands"](INI)[0][0][-1] == "http://shelly.local/rpc/Switch.Set?id=0&on=true", "commande complétée enregistrée")
 
 # Dialogue : déplacer les lignes
 cfg["cfgini_save_commands"]([(["un"], "Un", 0, True, False), (["deux"], "Deux", 2, False, True),

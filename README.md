@@ -111,7 +111,7 @@ Hover your mouse over a column title to display help tooltips.
 
 #### Writing a command
 
-- **Add from a template** (first button) creates a ready-made command: copy the 3MF, open the project folder, web request, Shelly plug (Gen 1 or Gen 2, with or without a password, or through the Shelly cloud with an API key), Home Assistant, Jeedom, Klipper preheating, Python script. The part to replace, such as `<PLUG_IP>`, is selected: just type. Requests made with `curl` use `--fail`, so that an error answered by the device is reported as an error.
+- **Add from a template** (first button) creates a ready-made command: copy the 3MF, open the project folder, web request, Shelly plug (Gen 1 or Gen 2, with or without a password, or through the Shelly cloud with an API key), Home Assistant, Jeedom, Klipper preheating, Python script. A small window then asks for the parts to replace, such as `<PLUG_IP>` or `<PASSWORD>`, one box each, with where to find the value (Shelly app, Home Assistant profile…), a preview of the command and a Test button. It checks the values: an address must be an IP address or a host name (such as `shelly.local`), without `http://`; a key or a token must not contain spaces. A box left empty can be completed later with **Complete…**. Requests made with `curl` use `--fail`, so that an error answered by the device is reported as an error.
 - **Add from scratch** adds an empty row.
 - **Move up** / **Move down** change the order of the commands. "Before the export" commands are always run before the others.
 - Under the table, the command of the selected row can be edited with:

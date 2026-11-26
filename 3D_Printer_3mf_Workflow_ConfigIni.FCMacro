@@ -212,6 +212,46 @@ cfgini_EDITOR_TEXTS = {
         "ph_ha": "ADRESSE_HOME_ASSISTANT",
         "ph_jeedom": "ADRESSE_JEEDOM",
         "ph_cmd_id": "ID_DE_LA_COMMANDE",
+        "fill_title": "Compléter la commande",
+        "fill_intro": "Remplissez les cases : la commande se complète au fur et à mesure. Une case laissée vide reste à compléter plus tard.",
+        "btn_fill": "Compléter…",
+        "hint_fill": "Remplit une à une, avec une aide, les parties <…> de la commande",
+        "fill_preview": "Commande obtenue :",
+        "fill_err_scheme": "Mettez seulement l'adresse, sans http:// ni https://.",
+        "fill_err_host": "Mettez seulement l'adresse IP ou le nom d'hôte, sans / ni numéro de port.",
+        "fill_err_space": "Pas d'espace ici (copier-coller incomplet ?).",
+        "fill_err_quote": "Le caractère \" n'est pas accepté ici.",
+        "fill_ex_host": "ex. 192.168.1.42 ou nom d'hôte",
+        "phlbl_ip_plug": "Adresse de la prise",
+        "phhelp_ip_plug": "Adresse IP (ex. 192.168.1.42) ou nom d'hôte (ex. shellyplug-s-1234.local) : dans l'application Shelly (paramètres de l'appareil) ou dans votre box.",
+        "phlbl_ip_printer": "Adresse de l'imprimante",
+        "phhelp_ip_printer": "Adresse IP ou nom d'hôte de l'imprimante : celle que vous tapez pour ouvrir Mainsail ou Fluidd.",
+        "phlbl_password": "Mot de passe",
+        "phhelp_password": "Le mot de passe de l'accès local, défini dans l'application Shelly.",
+        "phlbl_user": "Utilisateur",
+        "phhelp_user": "Le nom d'utilisateur de l'accès local, défini dans l'application Shelly.",
+        "phlbl_server": "Adresse du serveur",
+        "phhelp_server": "Adresse IP ou nom d'hôte du serveur, éventuellement suivi de :port.",
+        "phlbl_folder": "Dossier de destination",
+        "phhelp_folder": "Dossier où copier le 3MF. Il doit déjà exister.",
+        "phlbl_script": "Nom du script",
+        "phhelp_script": "Nom du script Python placé dans le dossier du projet, sans .py.",
+        "phlbl_cloud_server": "Serveur cloud",
+        "phhelp_cloud_server": "Application Shelly : Paramètres utilisateur → Clé d'autorisation cloud. Adresse du serveur, par ex. shelly-xx-eu.shelly.cloud.",
+        "phlbl_device_id": "ID de la prise",
+        "phhelp_device_id": "Application Shelly : paramètres de l'appareil → Informations sur l'appareil → ID de l'appareil.",
+        "phlbl_api_key": "Clé API",
+        "phhelp_api_key": "Shelly cloud : Paramètres utilisateur → Clé d'autorisation cloud. Jeedom : Réglages → Système → Configuration → onglet API.",
+        "phlbl_token": "Jeton",
+        "phhelp_token": "Home Assistant : votre profil → onglet Sécurité → Jetons d'accès longue durée → Créer un jeton.",
+        "phlbl_entity": "Nom de la prise",
+        "phhelp_entity": "L'entité de la prise dans Home Assistant, sans « switch. » : pour switch.prise_imprimante, mettez prise_imprimante.",
+        "phlbl_ha": "Adresse de Home Assistant",
+        "phhelp_ha": "Adresse IP ou nom d'hôte (ex. homeassistant.local), sans :8123.",
+        "phlbl_jeedom": "Adresse de Jeedom",
+        "phhelp_jeedom": "Adresse IP ou nom d'hôte de Jeedom.",
+        "phlbl_cmd_id": "ID de la commande",
+        "phhelp_cmd_id": "Jeedom : le numéro de la commande, affiché dans sa configuration (roue crantée de la commande).",
         "chk_program": "Programme : {prog} → {path}",
         "chk_program_found": "Programme trouvé : {path}",
         "chk_not_found": "Programme introuvable : {prog}. Indiquez son chemin complet (bouton Parcourir…) ou vérifiez son nom.",
@@ -286,6 +326,46 @@ cfgini_EDITOR_TEXTS = {
         "ph_ha": "HOME_ASSISTANT_ADDRESS",
         "ph_jeedom": "JEEDOM_ADDRESS",
         "ph_cmd_id": "COMMAND_ID",
+        "fill_title": "Complete the command",
+        "fill_intro": "Fill in the boxes: the command is completed as you type. A box left empty stays to be completed later.",
+        "btn_fill": "Complete…",
+        "hint_fill": "Fills in, one by one and with help, the <…> parts of the command",
+        "fill_preview": "Resulting command:",
+        "fill_err_scheme": "Only the address, without http:// or https://.",
+        "fill_err_host": "Only the IP address or the host name, without / or port number.",
+        "fill_err_space": "No space here (incomplete copy and paste?).",
+        "fill_err_quote": "The \" character is not accepted here.",
+        "fill_ex_host": "e.g. 192.168.1.42 or host name",
+        "phlbl_ip_plug": "Plug address",
+        "phhelp_ip_plug": "IP address (e.g. 192.168.1.42) or host name (e.g. shellyplug-s-1234.local): in the Shelly app (device settings) or in your router.",
+        "phlbl_ip_printer": "Printer address",
+        "phhelp_ip_printer": "IP address or host name of the printer: the one you type to open Mainsail or Fluidd.",
+        "phlbl_password": "Password",
+        "phhelp_password": "The password of the local access, set in the Shelly app.",
+        "phlbl_user": "User",
+        "phhelp_user": "The user name of the local access, set in the Shelly app.",
+        "phlbl_server": "Server address",
+        "phhelp_server": "IP address or host name of the server, possibly followed by :port.",
+        "phlbl_folder": "Destination folder",
+        "phhelp_folder": "Folder where the 3MF is copied. It must already exist.",
+        "phlbl_script": "Script name",
+        "phhelp_script": "Name of the Python script stored in the project folder, without .py.",
+        "phlbl_cloud_server": "Cloud server",
+        "phhelp_cloud_server": "Shelly app: User settings → Authorization cloud key. Server address, e.g. shelly-xx-eu.shelly.cloud.",
+        "phlbl_device_id": "Plug ID",
+        "phhelp_device_id": "Shelly app: device settings → Device information → Device ID.",
+        "phlbl_api_key": "API key",
+        "phhelp_api_key": "Shelly cloud: User settings → Authorization cloud key. Jeedom: Settings → System → Configuration → API tab.",
+        "phlbl_token": "Token",
+        "phhelp_token": "Home Assistant: your profile → Security tab → Long-lived access tokens → Create token.",
+        "phlbl_entity": "Plug name",
+        "phhelp_entity": "The entity of the plug in Home Assistant, without \"switch.\": for switch.printer_plug, type printer_plug.",
+        "phlbl_ha": "Home Assistant address",
+        "phhelp_ha": "IP address or host name (e.g. homeassistant.local), without :8123.",
+        "phlbl_jeedom": "Jeedom address",
+        "phhelp_jeedom": "IP address or host name of Jeedom.",
+        "phlbl_cmd_id": "Command ID",
+        "phhelp_cmd_id": "Jeedom: the number of the command, shown in its configuration (gear of the command).",
         "chk_program": "Program: {prog} → {path}",
         "chk_program_found": "Program found: {path}",
         "chk_not_found": "Program not found: {prog}. Give its full path (Browse… button) or check its name.",
@@ -360,6 +440,46 @@ cfgini_EDITOR_TEXTS = {
         "ph_ha": "HOME_ASSISTANT_ADRESSE",
         "ph_jeedom": "JEEDOM_ADRESSE",
         "ph_cmd_id": "BEFEHLS_ID",
+        "fill_title": "Befehl vervollständigen",
+        "fill_intro": "Füllen Sie die Felder aus: der Befehl wird beim Tippen vervollständigt. Ein leeres Feld bleibt später auszufüllen.",
+        "btn_fill": "Vervollständigen…",
+        "hint_fill": "Füllt die <…>-Teile des Befehls einzeln und mit Hilfe aus",
+        "fill_preview": "Ergebnis:",
+        "fill_err_scheme": "Nur die Adresse, ohne http:// oder https://.",
+        "fill_err_host": "Nur die IP-Adresse oder der Hostname, ohne / und ohne Port.",
+        "fill_err_space": "Hier kein Leerzeichen (unvollständig kopiert?).",
+        "fill_err_quote": "Das Zeichen \" ist hier nicht erlaubt.",
+        "fill_ex_host": "z. B. 192.168.1.42 oder Hostname",
+        "phlbl_ip_plug": "Adresse der Steckdose",
+        "phhelp_ip_plug": "IP-Adresse (z. B. 192.168.1.42) oder Hostname (z. B. shellyplug-s-1234.local): in der Shelly-App (Geräteeinstellungen) oder im Router.",
+        "phlbl_ip_printer": "Adresse des Druckers",
+        "phhelp_ip_printer": "IP-Adresse oder Hostname des Druckers: die Adresse, mit der Sie Mainsail oder Fluidd öffnen.",
+        "phlbl_password": "Passwort",
+        "phhelp_password": "Das Passwort des lokalen Zugangs, in der Shelly-App festgelegt.",
+        "phlbl_user": "Benutzer",
+        "phhelp_user": "Der Benutzername des lokalen Zugangs, in der Shelly-App festgelegt.",
+        "phlbl_server": "Serveradresse",
+        "phhelp_server": "IP-Adresse oder Hostname des Servers, eventuell gefolgt von :Port.",
+        "phlbl_folder": "Zielordner",
+        "phhelp_folder": "Ordner, in den die 3MF kopiert wird. Er muss bereits existieren.",
+        "phlbl_script": "Skriptname",
+        "phhelp_script": "Name des Python-Skripts im Projektordner, ohne .py.",
+        "phlbl_cloud_server": "Cloud-Server",
+        "phhelp_cloud_server": "Shelly-App: Benutzereinstellungen → Cloud-Autorisierungsschlüssel. Serveradresse, z. B. shelly-xx-eu.shelly.cloud.",
+        "phlbl_device_id": "ID der Steckdose",
+        "phhelp_device_id": "Shelly-App: Geräteeinstellungen → Geräteinformationen → Geräte-ID.",
+        "phlbl_api_key": "API-Schlüssel",
+        "phhelp_api_key": "Shelly Cloud: Benutzereinstellungen → Cloud-Autorisierungsschlüssel. Jeedom: Einstellungen → System → Konfiguration → Reiter API.",
+        "phlbl_token": "Token",
+        "phhelp_token": "Home Assistant: Ihr Profil → Reiter Sicherheit → Langlebige Zugriffstoken → Token erstellen.",
+        "phlbl_entity": "Name der Steckdose",
+        "phhelp_entity": "Die Entität der Steckdose in Home Assistant, ohne „switch.“: für switch.drucker_steckdose geben Sie drucker_steckdose ein.",
+        "phlbl_ha": "Home-Assistant-Adresse",
+        "phhelp_ha": "IP-Adresse oder Hostname (z. B. homeassistant.local), ohne :8123.",
+        "phlbl_jeedom": "Jeedom-Adresse",
+        "phhelp_jeedom": "IP-Adresse oder Hostname von Jeedom.",
+        "phlbl_cmd_id": "Befehls-ID",
+        "phhelp_cmd_id": "Jeedom: die Nummer des Befehls, in seiner Konfiguration angezeigt (Zahnrad des Befehls).",
         "chk_program": "Programm: {prog} → {path}",
         "chk_program_found": "Programm gefunden: {path}",
         "chk_not_found": "Programm nicht gefunden: {prog}. Geben Sie den vollständigen Pfad an (Durchsuchen…) oder prüfen Sie den Namen.",
@@ -681,6 +801,192 @@ def cfgini_check_html(analysis, example):
     return "<br>".join(lines)
 
 
+# Parties <…> des modèles : genre de valeur attendue (contrôles de la fenêtre « Compléter »)
+cfgini_PH_KINDS = {
+    "ph_ip_plug": "host", "ph_ip_printer": "host", "ph_ha": "host", "ph_cloud_server": "host",
+    "ph_server": "address", "ph_jeedom": "address",
+    "ph_api_key": "word", "ph_token": "word", "ph_device_id": "word", "ph_cmd_id": "word",
+    "ph_user": "word", "ph_entity": "entity",
+    "ph_password": "text", "ph_folder": "folder", "ph_script": "text",
+}
+cfgini_PLACEHOLDER_RE = r"<[^<>\"\s]+>"
+
+
+def cfgini_placeholders(text):
+    """Parties <…> de la commande, sans doublon, dans l'ordre."""
+    found = []
+    for ph in re.findall(cfgini_PLACEHOLDER_RE, text):
+        if ph not in found:
+            found.append(ph)
+    return found
+
+
+def cfgini_placeholder_key(ph):
+    """Clé ph_… d'une partie <…> d'un modèle (langue courante), ou None."""
+    for key in cfgini_PH_KINDS:
+        if ph == "<" + cfgini_tr(key) + ">":
+            return key
+    return None
+
+
+def cfgini_clean_fill_value(key, value):
+    value = value.strip()
+    if key == "ph_entity" and value.lower().startswith("switch."):
+        value = value[len("switch."):]
+    return value
+
+
+def cfgini_check_fill_value(key, value):
+    """Message d'erreur pour la valeur d'une partie <…>, ou None."""
+    tr = cfgini_tr
+    if not value:
+        return None
+    if '"' in value:
+        return tr("fill_err_quote")
+    kind = cfgini_PH_KINDS.get(key)
+    if kind in ("host", "address") and "://" in value:
+        return tr("fill_err_scheme")
+    if kind == "host" and ("/" in value or ":" in value):
+        return tr("fill_err_host")
+    if kind in ("host", "address", "word", "entity") and any(c.isspace() for c in value):
+        return tr("fill_err_space")
+    return None
+
+
+def cfgini_fill_command(command, answers):
+    """
+    Remplace les parties <…> par les valeurs données (les vides restent).
+    Une valeur avec espaces placée hors guillemets est mise entre guillemets.
+    """
+    for ph, value in answers.items():
+        if not value:
+            continue
+        out, pos = [], 0
+        while True:
+            i = command.find(ph, pos)
+            if i < 0:
+                out.append(command[pos:])
+                break
+            inside = command[:i].replace('\\"', "").count('"') % 2 == 1
+            out.append(command[pos:i])
+            out.append(f'"{value}"' if any(c.isspace() for c in value) and not inside else value)
+            pos = i + len(ph)
+        command = "".join(out)
+    return command
+
+
+def cfgini_fill_dialog(parent, command, title=None, test_fn=None):
+    """
+    Fenêtre « Compléter la commande » : une case par partie <…>, avec libellé et aide.
+    Renvoie la commande complétée, ou None si annulé.
+    test_fn(commande, fenêtre, label) : bouton Tester (facultatif).
+    """
+    tr = cfgini_tr
+    phs = cfgini_placeholders(command)
+    if not phs:
+        return None
+    dlg = QtGui.QDialog(parent)
+    dlg.setObjectName("cfgini_fill")
+    dlg.setWindowTitle(tr("fill_title"))
+    dlg.setMinimumWidth(620)
+    lay = QtGui.QVBoxLayout(dlg)
+    if title:
+        lbl_title = QtGui.QLabel("<b>" + html.escape(title) + "</b>")
+        lay.addWidget(lbl_title)
+    intro = QtGui.QLabel(tr("fill_intro"))
+    intro.setWordWrap(True)
+    lay.addWidget(intro)
+
+    grid = QtGui.QGridLayout()
+    fields = []
+    row = 0
+    for ph in phs:
+        key = cfgini_placeholder_key(ph)
+        name = tr("phlbl_" + key[3:]) if key else ph.strip("<>")
+        grid.addWidget(QtGui.QLabel(name), row, 0, QtCore.Qt.AlignTop)
+        edit = QtGui.QLineEdit()
+        edit.setObjectName("fill_" + ph.strip("<>"))
+        if cfgini_PH_KINDS.get(key) == "host":
+            edit.setPlaceholderText(tr("fill_ex_host"))
+        h = QtGui.QHBoxLayout()
+        h.addWidget(edit)
+        if key == "ph_folder":
+            btn_dir = QtGui.QPushButton(tr("btn_browse"))
+
+            def pick_dir(checked=False, e=edit):
+                folder = QtGui.QFileDialog.getExistingDirectory(dlg, tr("btn_browse"))
+                if folder:
+                    e.setText(os.path.normpath(folder))
+            btn_dir.clicked.connect(pick_dir)
+            h.addWidget(btn_dir)
+        grid.addLayout(h, row, 1)
+        row += 1
+        if key:
+            help_lbl = QtGui.QLabel(tr("phhelp_" + key[3:]))
+            help_lbl.setWordWrap(True)
+            help_lbl.setStyleSheet("color:#666")
+            grid.addWidget(help_lbl, row, 1)
+            row += 1
+        err = QtGui.QLabel()
+        err.setStyleSheet("color:#c62828")
+        err.setWordWrap(True)
+        err.hide()
+        grid.addWidget(err, row, 1)
+        row += 1
+        fields.append((ph, key, edit, err))
+    grid.setColumnStretch(1, 1)
+    lay.addLayout(grid)
+
+    lay.addWidget(QtGui.QLabel(tr("fill_preview")))
+    preview = QtGui.QLabel()
+    preview.setObjectName("fill_preview")
+    preview.setTextFormat(QtCore.Qt.PlainText)
+    preview.setWordWrap(True)
+    preview.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+    preview.setStyleSheet("font-family:monospace; background:#f4f4f4; padding:4px")
+    lay.addWidget(preview)
+    lbl_test = QtGui.QLabel()
+    lbl_test.setWordWrap(True)
+    lay.addWidget(lbl_test)
+
+    btns = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+    btn_test = None
+    if test_fn is not None:
+        btn_test = btns.addButton(tr("btn_test"), QtGui.QDialogButtonBox.ActionRole)
+        btn_test.setToolTip(tr("hint_test"))
+    lay.addWidget(btns)
+
+    def result():
+        return cfgini_fill_command(command, {ph: cfgini_clean_fill_value(key, e.text())
+                                             for ph, key, e, _ in fields})
+
+    def refresh(*a):
+        bad = False
+        for ph, key, e, err in fields:
+            msg = cfgini_check_fill_value(key, cfgini_clean_fill_value(key, e.text()))
+            err.setText(msg or "")
+            err.setVisible(bool(msg))
+            bad = bad or bool(msg)
+        preview.setText(result())
+        btns.button(QtGui.QDialogButtonBox.Ok).setEnabled(not bad)
+        if btn_test is not None:
+            btn_test.setEnabled(not bad)
+        lbl_test.setText("")
+
+    for _, _, e, _ in fields:
+        e.textChanged.connect(refresh)
+    btns.accepted.connect(dlg.accept)
+    btns.rejected.connect(dlg.reject)
+    if btn_test is not None:
+        btn_test.clicked.connect(lambda: test_fn(result(), dlg, lbl_test))
+    refresh()
+    if fields:
+        fields[0][2].setFocus()
+    if dlg.exec_() == QtGui.QDialog.Accepted:
+        return result()
+    return None
+
+
 def cfgini_templates(windows=None):
     """Modèles : (clé du libellé, commande). Commande None = choisir un programme."""
     if windows is None:
@@ -982,8 +1288,11 @@ def show_extra_commands_dialog(parent=None, path=None):
     btn_vars.setMenu(menu_vars)
     btn_test = QtGui.QPushButton(tr("btn_test"))
     btn_test.setToolTip(tr("hint_test"))
+    btn_fill = QtGui.QPushButton(tr("btn_fill"))
+    btn_fill.setToolTip(tr("hint_fill"))
     h_tools.addWidget(btn_browse)
     h_tools.addWidget(btn_vars)
+    h_tools.addWidget(btn_fill)
     h_tools.addStretch(1)
     h_tools.addWidget(btn_test)
     ed_layout.addLayout(h_tools)
@@ -1014,6 +1323,7 @@ def show_extra_commands_dialog(parent=None, path=None):
                                   check_paths=not example)
         lbl_check.setText(cfgini_check_html(analysis, example))
         btn_test.setEnabled(current_row() >= 0 and bool(analysis["parts"]))
+        btn_fill.setEnabled(current_row() >= 0 and bool(cfgini_placeholders(cmd_edit.text())))
         return analysis
 
     hooks["check"] = update_check
@@ -1174,8 +1484,18 @@ def show_extra_commands_dialog(parent=None, path=None):
             return
         row = add_row(command, tr(label_key))
         select_row(row)
-        # Sélection de la première partie à remplacer : il suffit de taper
-        m = re.search(r"<[^<>\"\s]+>", command)
+        # Fenêtre pour remplir les parties <…>, puis sélection de la première restante
+        on_fill(tr(label_key))
+
+    def on_fill(title=None):
+        text = cmd_edit.text()
+        if current_row() < 0 or not cfgini_placeholders(text):
+            return
+        filled = cfgini_fill_dialog(dialog, text, title, test_fn=test_command)
+        if filled is not None:
+            cmd_edit.setText(filled)
+        m = re.search(cfgini_PLACEHOLDER_RE, cmd_edit.text())
+        cmd_edit.setFocus()
         if m:
             cmd_edit.setSelection(m.start(), m.end() - m.start())
 
@@ -1193,31 +1513,37 @@ def show_extra_commands_dialog(parent=None, path=None):
         action.setStatusTip(sample)
         action.triggered.connect(lambda checked=False, v=var: insert_text(v))
 
-    def on_test():
-        analysis = update_check()
+    def test_command(text, parent, out_label, before=False):
+        """Exécute la commande après confirmation et affiche le résultat dans out_label."""
+        analysis = cfgini_analyze(text, values, before=before, check_paths=not example)
         parts = analysis["parts"]
         if not parts:
             return
         if analysis["errors"]:
-            QtGui.QMessageBox.warning(dialog, tr("test_title"), tr("test_blocked").format(
+            QtGui.QMessageBox.warning(parent, tr("test_title"), tr("test_blocked").format(
                 errors="\n".join(analysis["errors"])))
             return
         shown = subprocess.list2cmdline(parts) if os.name == "nt" else \
             " ".join(shlex.quote(p) for p in parts)
         answer = QtGui.QMessageBox.question(
-            dialog, tr("test_title"), tr("test_confirm").format(cmd=shown),
+            parent, tr("test_title"), tr("test_confirm").format(cmd=shown),
             QtGui.QMessageBox.Yes | QtGui.QMessageBox.No, QtGui.QMessageBox.No)
         if answer != QtGui.QMessageBox.Yes:
             return
+        out_label.setStyleSheet("")
+        out_label.setText(tr("test_running"))
+        QtGui.QApplication.processEvents()
+        ok, msg = cfgini_test_message(parts, cfgini_run_test(parts))
+        out_label.setStyleSheet("color:#2e7d32" if ok else "color:#c62828")
+        out_label.setText(("✓ " if ok else "✗ ") + msg)
+
+    def on_test():
+        update_check()
         btn_test.setEnabled(False)
-        lbl_test.setStyleSheet("")
-        lbl_test.setText(tr("test_running"))
         try:
-            ok, msg = cfgini_test_message(parts, cfgini_run_test(parts))
+            test_command(cmd_edit.text(), dialog, lbl_test, before=row_is_before(current_row()))
         finally:
             btn_test.setEnabled(True)
-        lbl_test.setStyleSheet("color:#2e7d32" if ok else "color:#c62828")
-        lbl_test.setText(("✓ " if ok else "✗ ") + msg)
 
     btn_add.clicked.connect(on_add)
     btn_del.clicked.connect(del_row)
@@ -1225,6 +1551,7 @@ def show_extra_commands_dialog(parent=None, path=None):
     btn_down.clicked.connect(lambda: move_row(1))
     btn_browse.clicked.connect(on_browse)
     btn_test.clicked.connect(on_test)
+    btn_fill.clicked.connect(lambda: on_fill())
     if table.rowCount():
         table.setCurrentCell(0, 0)
     load_editor()
