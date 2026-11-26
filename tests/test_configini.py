@@ -445,6 +445,13 @@ expect(any("pas encore écrit" in w for w in a["warnings"]), f"avant l'export + 
 a = cfg["cfgini_analyze"]('cmd /c copy "%EXPORT%.3mf" x', values, windows=True, before=False)
 expect(not a["warnings"], "après l'export + %EXPORT% : pas d'avertissement")
 
+# Programme donné par son chemin complet : affiché une seule fois
+exe = sys.executable
+h = cfg["cfgini_check_html"](cfg["cfgini_analyze"](f'"{exe}" -V', values), False)
+expect(h.count(os.path.basename(exe)) == 1, f"chemin complet affiché une fois ({h})")
+h = cfg["cfgini_check_html"](cfg["cfgini_analyze"]('cmd /c dir', values, windows=True), False)
+expect("→" in h, f"nom court : nom → chemin trouvé ({h})")
+
 order = []
 ns = load_main()
 ns["show_message"] = lambda t, m: order.append(("message", None))

@@ -204,6 +204,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_jeedom": "ADRESSE_JEEDOM",
         "ph_cmd_id": "ID_DE_LA_COMMANDE",
         "chk_program": "Programme : {prog} → {path}",
+        "chk_program_found": "Programme trouvé : {path}",
         "chk_not_found": "Programme introuvable : {prog}. Indiquez son chemin complet (bouton Parcourir…) ou vérifiez son nom.",
         "chk_builtin": "« {word} » est une commande interne de Windows, pas un programme : écrivez cmd /c {word} …",
         "chk_params": "Paramètres",
@@ -273,6 +274,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_jeedom": "JEEDOM_ADDRESS",
         "ph_cmd_id": "COMMAND_ID",
         "chk_program": "Program: {prog} → {path}",
+        "chk_program_found": "Program found: {path}",
         "chk_not_found": "Program not found: {prog}. Give its full path (Browse… button) or check its name.",
         "chk_builtin": "\"{word}\" is a command built into Windows, not a program: write cmd /c {word} …",
         "chk_params": "Parameters",
@@ -342,6 +344,7 @@ cfgini_EDITOR_TEXTS = {
         "ph_jeedom": "JEEDOM_ADRESSE",
         "ph_cmd_id": "BEFEHLS_ID",
         "chk_program": "Programm: {prog} → {path}",
+        "chk_program_found": "Programm gefunden: {path}",
         "chk_not_found": "Programm nicht gefunden: {prog}. Geben Sie den vollständigen Pfad an (Durchsuchen…) oder prüfen Sie den Namen.",
         "chk_builtin": "„{word}“ ist ein interner Windows-Befehl, kein Programm: schreiben Sie cmd /c {word} …",
         "chk_params": "Parameter",
@@ -605,8 +608,12 @@ def cfgini_check_html(analysis, example):
     for msg in analysis["errors"]:
         lines.append(f"<span style='color:#c62828'>✗ {esc(msg)}</span>")
     if analysis["program_path"]:
-        lines.append("<span style='color:#2e7d32'>✓ " + esc(tr("chk_program").format(
-            prog=analysis["program"], path=analysis["program_path"])) + "</span>")
+        prog, path = analysis["program"], analysis["program_path"]
+        # Chemin complet déjà tapé : inutile de l'afficher deux fois
+        same = os.path.normcase(os.path.normpath(prog)) == os.path.normcase(os.path.normpath(path))
+        text = (tr("chk_program_found").format(path=path) if same
+                else tr("chk_program").format(prog=prog, path=path))
+        lines.append("<span style='color:#2e7d32'>✓ " + esc(text) + "</span>")
     for msg in analysis["warnings"]:
         lines.append(f"<span style='color:#b26a00'>⚠ {esc(msg)}</span>")
     parts = analysis["parts"]
