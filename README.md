@@ -113,13 +113,15 @@ Hover your mouse over a column title to display help tooltips.
 
 - **Add from a template** (first button) creates a ready-made command: copy the 3MF, open the project folder, web request, Shelly plug (Gen 1 or Gen 2, with or without a password, or through the Shelly cloud with an API key), Home Assistant, Jeedom, Klipper preheating, Python script. The part to replace, such as `<PLUG_IP>`, is selected: just type. Requests made with `curl` use `--fail`, so that an error answered by the device is reported as an error.
 - **Add from scratch** adds an empty row.
+- **Move up** / **Move down** change the order of the commands. "Before the export" commands are always run before the others.
 - Under the table, the command of the selected row can be edited with:
   - **Browse…**: inserts the path of a program or file;
-  - **Insert a variable**: inserts `%EXPORT%.3mf`, `%PROJECTDIR%`… (see below), with the quotes and the space when needed.
+  - **Insert a variable**: inserts `%EXPORT%.3mf`, `%PROJECTDIR%`… (see below), with the quotes and the space when needed. The menu shows the real value of each variable for the current export.
 - A **check**, updated as you type, shows:
   - whether the program is found, and where;
   - how the command is split into parameters, with the real paths of the current export;
-  - the usual mistakes: command built into Windows such as `copy` without `cmd /c`, part of a template left to replace, unclosed quote, single quotes, `>` or `|`, unknown variable, `%EXPORT%` used before the export.
+  - the usual mistakes: command built into Windows such as `copy` without `cmd /c`, part of a template left to replace, unclosed quote, single quotes, `>` or `|`, unknown variable, `%EXPORT%` used before the export;
+  - wrong paths: a full path such as `%PROJECT%` placed after a folder (use `%PROJECTNAME%`), a `C:/…` path given to `cmd` (write `C:\…`), a folder that does not exist.
 - **Test** runs the command right away (after confirmation) and tells whether it succeeded. For `curl`, the usual errors are explained (device not found, not reachable, error answered, no answer in time).
 
 Rules to know:

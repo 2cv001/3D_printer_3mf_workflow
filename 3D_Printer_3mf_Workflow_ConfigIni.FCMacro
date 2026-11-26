@@ -73,6 +73,9 @@ cfgini_TRANSLATIONS = {
         "hint_default": "Si coché, la commande sera activée par défaut.",
         "btn_add": "Ajouter sans modèle",
         "btn_del": "Supprimer",
+        "btn_up": "▲ Monter",
+        "btn_down": "▼ Descendre",
+        "hint_move": "Change l'ordre d'exécution. Les commandes « avant l'export » sont toujours lancées avant les autres.",
         "new_program": "Nouveau programme",
         "tooltip_cmd": "Programme + arguments, ex: calc.exe ou curl https://... --insecure",
         "tooltip_label": "Texte affiché à l’utilisateur",
@@ -108,6 +111,9 @@ cfgini_TRANSLATIONS = {
         "hint_default": "If checked, the command will be enabled by default.",
         "btn_add": "Add from scratch",
         "btn_del": "Delete",
+        "btn_up": "▲ Move up",
+        "btn_down": "▼ Move down",
+        "hint_move": "Changes the order of execution. \"Before the export\" commands are always run before the others.",
         "new_program": "New program",
         "tooltip_cmd": "Program + arguments, e.g. calc.exe or curl https://... --insecure",
         "tooltip_label": "Text displayed to the user",
@@ -143,6 +149,9 @@ cfgini_TRANSLATIONS = {
         "hint_default": "Wenn aktiviert, wird der Befehl standardmäßig ausgeführt",
         "btn_add": "Ohne Vorlage hinzufügen",
         "btn_del": "Löschen",
+        "btn_up": "▲ Nach oben",
+        "btn_down": "▼ Nach unten",
+        "hint_move": "Ändert die Ausführungsreihenfolge. Befehle „vor dem Export“ werden immer vor den anderen ausgeführt.",
         "new_program": "Neues Programm",
         "tooltip_cmd": "Programm + Argumente, z.B. calc.exe oder curl https://... --insecure",
         "tooltip_label": "Anzeigetext für den Nutzer",
@@ -169,12 +178,12 @@ cfgini_EDITOR_TEXTS = {
         "btn_test": "Tester",
         "hint_browse": "Choisir un programme (ou un fichier à passer en paramètre) : son chemin est inséré entre guillemets",
         "hint_test": "Exécute la commande maintenant, avec les chemins affichés, et dit si elle a réussi",
-        "var_export3mf": "le 3MF exporté",
-        "var_export": "l'export, sans extension",
-        "var_exportname": "nom de l'export, sans extension",
-        "var_project": "le projet FreeCAD, sans extension",
-        "var_projectdir": "dossier du projet",
-        "var_projectname": "nom du projet, sans extension",
+        "var_export3mf": "chemin complet du 3MF exporté",
+        "var_export": "chemin complet de l'export, sans extension",
+        "var_exportname": "nom seul de l'export (sans dossier ni extension)",
+        "var_project": "chemin complet du projet FreeCAD, sans extension",
+        "var_projectdir": "chemin complet du dossier du projet",
+        "var_projectname": "nom seul du projet (sans dossier ni extension)",
         "tpl_program": "Lancer un programme…",
         "tpl_copy": "Copier le 3MF dans un dossier",
         "tpl_open_folder": "Ouvrir le dossier du projet",
@@ -215,6 +224,10 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "Sous Windows, mettez des guillemets doubles \"…\" : les guillemets simples sont passés tels quels au programme ({arg}).",
         "chk_shell_op": "« {op} » ne fonctionne pas ici (la commande est lancée sans interpréteur) : pour l'utiliser, écrivez cmd /c … (Windows) ou sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} n'est pas une variable de la macro : elle restera telle quelle.",
+        "chk_full_path": "{var} est un chemin complet : placé derrière un dossier, il donne un chemin invalide ({arg}).",
+        "chk_full_path_name": " Pour le nom seul, utilisez {name}.",
+        "chk_forward_slash": "Écrivez ce chemin avec des \\ : les commandes de cmd prennent /… pour une option ({arg}).",
+        "chk_missing_folder": "Le dossier {folder} n'existe pas.",
         "chk_before_export": "Commande lancée avant l'export : le 3MF n'est pas encore écrit (%EXPORT%.3mf est l'ancienne version, ou n'existe pas encore).",
         "test_title": "Tester la commande",
         "test_confirm": "Cette commande va vraiment être exécutée maintenant :\n\n{cmd}\n\nContinuer ?",
@@ -239,12 +252,12 @@ cfgini_EDITOR_TEXTS = {
         "btn_test": "Test",
         "hint_browse": "Choose a program (or a file to pass as a parameter): its path is inserted between quotes",
         "hint_test": "Runs the command now, with the paths shown, and tells whether it succeeded",
-        "var_export3mf": "the exported 3MF",
-        "var_export": "the export, without extension",
-        "var_exportname": "export name, without extension",
-        "var_project": "the FreeCAD project, without extension",
-        "var_projectdir": "project folder",
-        "var_projectname": "project name, without extension",
+        "var_export3mf": "full path of the exported 3MF",
+        "var_export": "full path of the export, without extension",
+        "var_exportname": "name of the export only (no folder, no extension)",
+        "var_project": "full path of the FreeCAD project, without extension",
+        "var_projectdir": "full path of the project folder",
+        "var_projectname": "name of the project only (no folder, no extension)",
         "tpl_program": "Run a program…",
         "tpl_copy": "Copy the 3MF to a folder",
         "tpl_open_folder": "Open the project folder",
@@ -285,6 +298,10 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "On Windows, use double quotes \"…\": single quotes are passed as is to the program ({arg}).",
         "chk_shell_op": "\"{op}\" does not work here (the command is run without a shell): to use it, write cmd /c … (Windows) or sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} is not a variable of the macro: it will be left as is.",
+        "chk_full_path": "{var} is a full path: placed after a folder, it gives an invalid path ({arg}).",
+        "chk_full_path_name": " For the name only, use {name}.",
+        "chk_forward_slash": "Write this path with \\: cmd commands take /… for an option ({arg}).",
+        "chk_missing_folder": "The folder {folder} does not exist.",
         "chk_before_export": "Command run before the export: the 3MF is not written yet (%EXPORT%.3mf is the previous version, or does not exist yet).",
         "test_title": "Test the command",
         "test_confirm": "This command will really be run now:\n\n{cmd}\n\nContinue?",
@@ -309,12 +326,12 @@ cfgini_EDITOR_TEXTS = {
         "btn_test": "Testen",
         "hint_browse": "Programm (oder als Parameter zu übergebende Datei) wählen: der Pfad wird in Anführungszeichen eingefügt",
         "hint_test": "Führt den Befehl jetzt mit den angezeigten Pfaden aus und meldet, ob er erfolgreich war",
-        "var_export3mf": "die exportierte 3MF",
-        "var_export": "der Export, ohne Endung",
-        "var_exportname": "Name des Exports, ohne Endung",
-        "var_project": "das FreeCAD-Projekt, ohne Endung",
-        "var_projectdir": "Projektordner",
-        "var_projectname": "Projektname, ohne Endung",
+        "var_export3mf": "vollständiger Pfad der exportierten 3MF",
+        "var_export": "vollständiger Pfad des Exports, ohne Endung",
+        "var_exportname": "nur der Name des Exports (ohne Ordner und Endung)",
+        "var_project": "vollständiger Pfad des FreeCAD-Projekts, ohne Endung",
+        "var_projectdir": "vollständiger Pfad des Projektordners",
+        "var_projectname": "nur der Projektname (ohne Ordner und Endung)",
         "tpl_program": "Ein Programm starten…",
         "tpl_copy": "Die 3MF in einen Ordner kopieren",
         "tpl_open_folder": "Projektordner öffnen",
@@ -355,6 +372,10 @@ cfgini_EDITOR_TEXTS = {
         "chk_single_quotes": "Unter Windows doppelte Anführungszeichen \"…\" verwenden: einfache werden unverändert an das Programm übergeben ({arg}).",
         "chk_shell_op": "„{op}“ funktioniert hier nicht (der Befehl wird ohne Shell gestartet): schreiben Sie dafür cmd /c … (Windows) oder sh -c \"…\" (Linux).",
         "chk_unknown_var": "{var} ist keine Variable des Makros: sie bleibt unverändert.",
+        "chk_full_path": "{var} ist ein vollständiger Pfad: hinter einem Ordner ergibt er einen ungültigen Pfad ({arg}).",
+        "chk_full_path_name": " Für den Namen allein verwenden Sie {name}.",
+        "chk_forward_slash": "Schreiben Sie diesen Pfad mit \\: cmd-Befehle halten /… für eine Option ({arg}).",
+        "chk_missing_folder": "Der Ordner {folder} existiert nicht.",
         "chk_before_export": "Befehl vor dem Export: die 3MF ist noch nicht geschrieben (%EXPORT%.3mf ist die alte Version oder existiert noch nicht).",
         "test_title": "Befehl testen",
         "test_confirm": "Dieser Befehl wird jetzt wirklich ausgeführt:\n\n{cmd}\n\nFortfahren?",
@@ -537,12 +558,13 @@ def cfgini_find_program(program):
     return shutil.which(program)
 
 
-def cfgini_analyze(text, values, windows=None, before=False):
+def cfgini_analyze(text, values, windows=None, before=False, check_paths=True):
     """
     Analyse une ligne de commande. Renvoie un dict :
       parts : arguments après remplacement des variables (None si la ligne est vide ou invalide)
       program, program_path
       errors, warnings : listes de messages (texte simple)
+    check_paths = False : ne pas chercher les dossiers sur le disque (chemins d'exemple)
     """
     if windows is None:
         windows = (os.name == "nt")
@@ -590,6 +612,37 @@ def cfgini_analyze(text, values, windows=None, before=False):
             if arg in cfgini_SHELL_OPERATORS:
                 result["warnings"].append(tr("chk_shell_op").format(op=arg))
                 break
+
+    # Chemin complet collé derrière un dossier : C:\Sauvegardes\%PROJECT%.FCStd
+    full_paths = {"%PROJECT%": "%PROJECTNAME%", "%EXPORT%": "%EXPORTNAME%", "%PROJECTDIR%": None}
+    for arg in raw[1:]:
+        for m in re.finditer(r"%(PROJECT|EXPORT|PROJECTDIR)%", arg):
+            if m.start() > 0 and arg[m.start() - 1] in "\\/":
+                var = m.group(0)
+                msg = tr("chk_full_path").format(var=var, arg=arg)
+                if full_paths[var]:
+                    msg += tr("chk_full_path_name").format(name=full_paths[var])
+                result["warnings"].append(msg)
+
+    # Chemin Windows écrit avec des / passé à cmd : copy, move… le prennent pour une option
+    if windows and name in ("cmd", "cmd.exe"):
+        for arg in raw[1:]:
+            if re.match(r"^[A-Za-z]:/", arg):
+                result["warnings"].append(tr("chk_forward_slash").format(arg=arg))
+
+    # Dossier d'un chemin absolu introuvable (destination d'une copie…)
+    if check_paths:
+        abs_path = r"^([A-Za-z]:[\\/]|\\\\)" if windows else r"^/"
+        seen = set()
+        for arg in parts[1:]:
+            if not re.match(abs_path, arg) or re.search(r"<[^<>]+>|%[A-Za-z_]+%", arg):
+                continue
+            if os.path.exists(arg):
+                continue
+            folder = os.path.dirname(os.path.normpath(arg))
+            if folder and folder not in seen and not os.path.isdir(folder):
+                seen.add(folder)
+                result["warnings"].append(tr("chk_missing_folder").format(folder=folder))
 
     for var in sorted(set(re.findall(r"%[A-Za-z_][A-Za-z0-9_]*%", text))):
         if var in cfgini_VARIABLES:
@@ -901,10 +954,16 @@ def show_extra_commands_dialog(parent=None, path=None):
     menu_templates = QtGui.QMenu(btn_templates)
     btn_templates.setMenu(menu_templates)
     btn_del = QtGui.QPushButton(tr("btn_del"))
+    btn_up = QtGui.QPushButton(tr("btn_up"))
+    btn_down = QtGui.QPushButton(tr("btn_down"))
+    for b in (btn_up, btn_down):
+        b.setToolTip(tr("hint_move"))
     h_btns = QtGui.QHBoxLayout()
     h_btns.addWidget(btn_templates)   # en premier : le plus utile pour démarrer
     h_btns.addWidget(btn_add)
     h_btns.addWidget(btn_del)
+    h_btns.addWidget(btn_up)
+    h_btns.addWidget(btn_down)
     layout.addLayout(h_btns)
 
     # --- Zone d'édition de la commande de la ligne sélectionnée ---
@@ -951,7 +1010,8 @@ def show_extra_commands_dialog(parent=None, path=None):
         return bool(w is not None and w.isChecked())
 
     def update_check():
-        analysis = cfgini_analyze(cmd_edit.text(), values, before=row_is_before(current_row()))
+        analysis = cfgini_analyze(cmd_edit.text(), values, before=row_is_before(current_row()),
+                                  check_paths=not example)
         lbl_check.setText(cfgini_check_html(analysis, example))
         btn_test.setEnabled(current_row() >= 0 and bool(analysis["parts"]))
         return analysis
@@ -1005,6 +1065,45 @@ def show_extra_commands_dialog(parent=None, path=None):
         if row >= 0:
             table.removeRow(row)
         load_editor()
+
+    def row_values(r):
+        texts = [table.item(r, c).text() if table.item(r, c) is not None else "" for c in range(3)]
+        checks = [table.cellWidget(r, c).isChecked() for c in (3, 4)]
+        return texts, checks
+
+    def set_row_values(r, values_):
+        texts, checks = values_
+        for c, text in enumerate(texts):
+            table.item(r, c).setText(text)
+        for c, checked in zip((3, 4), checks):
+            w = table.cellWidget(r, c)
+            w.blockSignals(True)
+            w.setChecked(checked)
+            w.blockSignals(False)
+
+    def move_row(delta):
+        r = current_row()
+        other = r + delta
+        if r < 0 or not 0 <= other < table.rowCount():
+            return
+        syncing[0] = True
+        a, b = row_values(r), row_values(other)
+        set_row_values(r, b)
+        set_row_values(other, a)
+        syncing[0] = False
+        table.resizeRowsToContents()
+        table.setCurrentCell(other, table.currentColumn() if table.currentColumn() >= 0 else 0)
+        load_editor()
+
+    def update_move_buttons():
+        r = current_row()
+        btn_up.setEnabled(r > 0)
+        btn_down.setEnabled(0 <= r < table.rowCount() - 1)
+
+    table.currentCellChanged.connect(lambda *a: update_move_buttons())
+    table.model().rowsInserted.connect(lambda *a: update_move_buttons())
+    table.model().rowsRemoved.connect(lambda *a: update_move_buttons())
+    update_move_buttons()
 
     def set_label_if_default(row, label):
         item = table.item(row, 1)
@@ -1088,7 +1187,8 @@ def show_extra_commands_dialog(parent=None, path=None):
                      ("%EXPORTNAME%", "var_exportname"), ("%PROJECT%", "var_project"),
                      ("%PROJECTDIR%", "var_projectdir"), ("%PROJECTNAME%", "var_projectname")):
         sample = cfgini_substitute([var], values)[0]
-        action = menu_vars.addAction(f"{var}   —   {tr(key)}")
+        shown = sample if len(sample) <= 60 else sample[:25] + "…" + sample[-32:]
+        action = menu_vars.addAction(f"{var}   —   {tr(key)}   →   {shown}")
         action.setToolTip(sample)
         action.setStatusTip(sample)
         action.triggered.connect(lambda checked=False, v=var: insert_text(v))
@@ -1121,6 +1221,8 @@ def show_extra_commands_dialog(parent=None, path=None):
 
     btn_add.clicked.connect(on_add)
     btn_del.clicked.connect(del_row)
+    btn_up.clicked.connect(lambda: move_row(-1))
+    btn_down.clicked.connect(lambda: move_row(1))
     btn_browse.clicked.connect(on_browse)
     btn_test.clicked.connect(on_test)
     if table.rowCount():

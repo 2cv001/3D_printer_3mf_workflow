@@ -445,6 +445,28 @@ expect(any("pas encore écrit" in w for w in a["warnings"]), f"avant l'export + 
 a = cfg["cfgini_analyze"]('cmd /c copy "%EXPORT%.3mf" x', values, windows=True, before=False)
 expect(not a["warnings"], "après l'export + %EXPORT% : pas d'avertissement")
 
+# Chemin complet collé derrière un dossier
+a = cfg["cfgini_analyze"](r'cmd /c copy /y "%PROJECT%.FCStd" "C:\svg\%PROJECT%.FCStd"', values, windows=True)
+expect(any("%PROJECTNAME%" in w for w in a["warnings"]), f"%PROJECT% derrière un dossier : avertissement ({a['warnings']})")
+a = cfg["cfgini_analyze"]('cp "%EXPORT%.3mf" "/tmp/%EXPORT%.3mf"', values, windows=False)
+expect(any("%EXPORTNAME%" in w for w in a["warnings"]), f"%EXPORT% derrière / : avertissement ({a['warnings']})")
+for ok_cmd in (r'cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\backup\%EXPORTNAME%.3mf"',
+               r'cmd /c copy /y "%PROJECT%.FCStd" "C:\svg\%PROJECTNAME%.FCStd"',
+               'curl --fail "http://h/?file=%EXPORT%.3mf"', 'prog --out=%EXPORT%.gcode'):
+    a = cfg["cfgini_analyze"](ok_cmd, values, windows=True)
+    expect(not any("chemin complet" in w for w in a["warnings"]), f"pas d'avertissement chemin complet : {ok_cmd} ({a['warnings']})")
+
+# Chemin C:/… passé à cmd, dossier introuvable
+a = cfg["cfgini_analyze"]('cmd /c copy /y "%EXPORT%.3mf" "C:/SVG_inexistant/%EXPORTNAME%.3mf"', values, windows=True)
+expect(any("C:/SVG_inexistant" in w and "option" in w for w in a["warnings"]), f"C:/ passé à cmd : avertissement ({a['warnings']})")
+expect(any("SVG_inexistant" in w and "n'existe pas" in w for w in a["warnings"]), f"dossier introuvable : avertissement ({a['warnings']})")
+a = cfg["cfgini_analyze"]('cmd /c copy /y "%EXPORT%.3mf" "C:/SVG_inexistant/x.3mf"', values, windows=True, check_paths=False)
+expect(not any("n'existe pas" in w for w in a["warnings"]), f"chemins d'exemple : dossiers non cherchés ({a['warnings']})")
+a = cfg["cfgini_analyze"](f'cmd /c copy /y "%EXPORT%.3mf" "{OUT}\\copie.3mf"', values, windows=True)
+expect(not a["warnings"], f"dossier existant, chemin avec \\ : aucun avertissement ({a['warnings']})")
+a = cfg["cfgini_analyze"]('curl --fail "http://h/x" -o "<DOSSIER>\\x"', values, windows=True)
+expect(not any("n'existe pas" in w for w in a["warnings"]), f"URL et partie à remplacer ignorées ({a['warnings']})")
+
 # Programme donné par son chemin complet : affiché une seule fois
 exe = sys.executable
 h = cfg["cfgini_check_html"](cfg["cfgini_analyze"](f'"{exe}" -V', values), False)
@@ -484,5 +506,39 @@ def tick_before(d):
 drive_dialog([tick_before, press_ok])
 cfg["show_extra_commands_dialog"](None, INI)
 expect([c[4] for c in cfg["cfgini_load_commands"](INI)] == [True, True, True], "case cochée dans la fenêtre : enregistrée")
+
+# Dialogue : déplacer les lignes
+cfg["cfgini_save_commands"]([(["un"], "Un", 0, True, False), (["deux"], "Deux", 2, False, True),
+                             (["trois"], "Trois", 0, False, False)], INI)
+move_state = {}
+
+
+def button(d, key):
+    return [b for b in d.findChildren(QtGui.QPushButton) if b.text() == cfg["cfgini_tr"](key)][0]
+
+
+def move_steps(d):
+    t = d.findChild(QtGui.QTableWidget)
+    # Au chargement : « avant » d'abord → deux, un, trois
+    t.setCurrentCell(0, 0)
+    move_state["up_first"] = button(d, "btn_up").isEnabled()
+    button(d, "btn_down").click()          # deux descend → un, deux, trois
+    move_state["row1"] = (t.item(1, 0).text(), t.item(1, 2).text(), t.cellWidget(1, 4).isChecked(),
+                          t.currentRow(), d.findChild(QtGui.QLineEdit).text())
+    t.setCurrentCell(2, 0)
+    move_state["down_last"] = button(d, "btn_down").isEnabled()
+    button(d, "btn_up").click()            # trois monte → un, trois, deux
+    button(d, "btn_up").click()            # encore → trois, un, deux
+
+
+drive_dialog([move_steps, press_ok])
+cfg["show_extra_commands_dialog"](None, INI)
+expect(move_state.get("up_first") is False and move_state.get("down_last") is False,
+       f"Monter désactivé en haut, Descendre en bas ({move_state})")
+expect(move_state.get("row1") == ("deux", "2", True, 1, "deux"),
+       f"ligne déplacée avec son délai, sa case et la sélection ({move_state.get('row1')})")
+order_saved = [(c[0][0], c[4]) for c in cfg["cfgini_load_commands"](INI)]
+expect(order_saved == [("deux", True), ("trois", False), ("un", False)],
+       f"trois, un, deux enregistré : avant d'abord, puis trois, un ({order_saved})")
 
 log("ÉCHECS :", FAILS if FAILS else "aucun")
