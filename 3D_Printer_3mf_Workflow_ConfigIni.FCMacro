@@ -69,7 +69,7 @@ cfgini_TRANSLATIONS = {
             "Exemple copie du 3MF : cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\sauvegarde.3mf\""
         ),
         "hint_label": "Texte affiché dans la case à cocher.",
-        "hint_delay": "Délai en secondes avant exécution (après la commande précédente).",
+        "hint_delay": "Délai en secondes avant de lancer cette commande.",
         "hint_default": "Si coché, la commande sera activée par défaut.",
         "btn_add": "Ajouter sans modèle",
         "btn_del": "Supprimer",
@@ -107,7 +107,7 @@ cfgini_TRANSLATIONS = {
             "Copy the 3MF: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Text displayed in the checkbox.",
-        "hint_delay": "Delay in seconds before execution (after the previous command).",
+        "hint_delay": "Delay in seconds before running this command.",
         "hint_default": "If checked, the command will be enabled by default.",
         "btn_add": "Add from scratch",
         "btn_del": "Delete",
@@ -145,7 +145,7 @@ cfgini_TRANSLATIONS = {
             "3MF kopieren: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Name des Programmes",
-        "hint_delay": "Verzögerung in Sekunden vor der Ausführung (nach dem vorherigen Befehl)",
+        "hint_delay": "Verzögerung in Sekunden vor dem Start dieses Befehls.",
         "hint_default": "Wenn aktiviert, wird der Befehl standardmäßig ausgeführt",
         "btn_add": "Ohne Vorlage hinzufügen",
         "btn_del": "Löschen",

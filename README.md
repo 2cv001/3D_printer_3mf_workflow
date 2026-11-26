@@ -103,7 +103,7 @@ Each row of the table is a command:
 |--------|---------|
 | Command | The program and its parameters |
 | Label | The name shown in the options window |
-| Delay (s) | Time to wait after the previous command |
+| Delay (s) | Time to wait before running the command |
 | Enabled by default | Checked in the options window when the macro starts |
 | Before the export | Run the command before the export instead of after it |
 
