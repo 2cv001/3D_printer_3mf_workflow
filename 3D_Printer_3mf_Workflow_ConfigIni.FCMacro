@@ -1,17 +1,55 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, sys, configparser, ast
+# Fenêtre de saisie des commandes utilisateur de la macro 3D_Printer_3mf_Workflow
+# (section [extra_commands] du fichier 3D_Printer_3mf_Workflow.ini).
+#
+# Tous les noms globaux commencent par « cfgini_ » : la macro principale (anciennes
+# versions) exécute ce fichier dans son propre espace de noms, il ne faut rien y écraser.
+import os, sys, re, configparser, ast, shlex
 from PySide import QtGui, QtCore
+try:
+    import FreeCADGui
+except ImportError:
+    FreeCADGui = None
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
-INI_FILE = os.path.join(SCRIPT_DIR, "3D_Printer_3mf_Workflow.ini")
+cfgini_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+cfgini_INI_FILE = os.path.join(cfgini_SCRIPT_DIR, "3D_Printer_3mf_Workflow.ini")
 
 # -------------------------
 # Traductions multilingues
 # -------------------------
+cfgini_PLACEHOLDERS = {
+    "fr": (
+        "<br><br><b>Variables remplacées au lancement :</b><br>"
+        "%PROJECT% : chemin complet du projet FreeCAD, sans extension<br>"
+        "%PROJECTDIR% : dossier du projet<br>"
+        "%PROJECTNAME% : nom du projet, sans extension<br>"
+        "%EXPORT% : chemin complet de l'export, sans extension (le 3MF est %EXPORT%.3mf)<br>"
+        "%EXPORTNAME% : nom de l'export, sans extension<br><br>"
+        "Mettre entre guillemets doubles un argument qui contient des espaces : "
+        "\"%EXPORT%.3mf\""
+    ),
+    "en": (
+        "<br><br><b>Variables replaced at launch:</b><br>"
+        "%PROJECT%: full path of the FreeCAD project, without extension<br>"
+        "%PROJECTDIR%: project folder<br>"
+        "%PROJECTNAME%: project name, without extension<br>"
+        "%EXPORT%: full path of the export, without extension (the 3MF is %EXPORT%.3mf)<br>"
+        "%EXPORTNAME%: export name, without extension<br><br>"
+        "Put an argument containing spaces between double quotes: \"%EXPORT%.3mf\""
+    ),
+    "de": (
+        "<br><br><b>Beim Start ersetzte Variablen:</b><br>"
+        "%PROJECT%: vollständiger Pfad des FreeCAD-Projekts, ohne Endung<br>"
+        "%PROJECTDIR%: Projektordner<br>"
+        "%PROJECTNAME%: Projektname, ohne Endung<br>"
+        "%EXPORT%: vollständiger Pfad des Exports, ohne Endung (die 3MF ist %EXPORT%.3mf)<br>"
+        "%EXPORTNAME%: Name des Exports, ohne Endung<br><br>"
+        "Ein Argument mit Leerzeichen in doppelte Anführungszeichen setzen: \"%EXPORT%.3mf\""
+    ),
+}
 
-
-TRANSLATIONS = {
+cfgini_TRANSLATIONS = {
     "fr": {
         "dialog_title": "Programmes utilisateurs",
         "col_command": "Commande",
@@ -23,19 +61,27 @@ TRANSLATIONS = {
             "Exemple simple : calc.exe<br>"
             "Exemple avec arguments : curl https://monserveur/api --insecure<br>"
             "Exemple requête HTTP avec argument : curl -X POST https://domotique/api "
-            "-d 'apikey=12345&action=on'<br>"
-            "Exemple Shelly Gen2 : curl -u admin:motDePass --insecure "
-            "http://IpDeLaPriseShelly/rpc/Switch.Set?id=0&on=true"
+            "-d \"apikey=VOTRE_CLE&action=on\"<br>"
+            "Exemple Shelly Gen2 : curl -u admin:VOTRE_MOT_DE_PASSE --insecure "
+            "http://IP_DE_LA_PRISE/rpc/Switch.Set?id=0&on=true<br>"
+            "Exemple copie du 3MF : cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\sauvegarde.3mf\""
         ),
         "hint_label": "Texte affiché dans la case à cocher.",
-        "hint_delay": "Délai en secondes avant exécution.",
+        "hint_delay": "Délai en secondes avant exécution (après la commande précédente).",
         "hint_default": "Si coché, la commande sera activée par défaut.",
         "btn_add": "Ajouter",
         "btn_del": "Supprimer",
         "new_program": "Nouveau programme",
         "tooltip_cmd": "Programme + arguments, ex: calc.exe ou curl https://... --insecure",
         "tooltip_label": "Texte affiché à l’utilisateur",
-        "tooltip_delay": "Temps d’attente avant exécution"
+        "tooltip_delay": "Temps d’attente avant exécution",
+        "error_title": "Programmes utilisateurs",
+        "error_read": "Le fichier de réglages n'a pas pu être lu :\n{path}\n\n{error}\n\n"
+                      "Corrigez-le (ou supprimez la section [extra_commands]) puis rouvrez cette fenêtre. "
+                      "Rien n'a été modifié.",
+        "error_delay": "Ligne {row} : le délai « {value} » n'est pas un nombre de secondes.",
+        "error_command": "Ligne {row} : la commande n'a pas pu être découpée ({error}).",
+        "error_write": "Le fichier de réglages n'a pas pu être enregistré :\n{path}\n\n{error}",
     },
     "en": {
         "dialog_title": "User Programs",
@@ -48,19 +94,27 @@ TRANSLATIONS = {
             "Simple example: calc.exe<br>"
             "Example with arguments: curl https://myserver/api --insecure<br>"
             "HTTP request with argument: curl -X POST https://domotics/api "
-            "-d 'apikey=12345&action=on'<br>"
-            "Shelly Gen2 example: curl -u admin:password --insecure "
-            "http://ShellyDeviceIP/rpc/Switch.Set?id=0&on=true"
+            "-d \"apikey=YOUR_KEY&action=on\"<br>"
+            "Shelly Gen2 example: curl -u admin:YOUR_PASSWORD --insecure "
+            "http://PLUG_IP/rpc/Switch.Set?id=0&on=true<br>"
+            "Copy the 3MF: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Text displayed in the checkbox.",
-        "hint_delay": "Delay in seconds before execution.",
+        "hint_delay": "Delay in seconds before execution (after the previous command).",
         "hint_default": "If checked, the command will be enabled by default.",
         "btn_add": "Add",
         "btn_del": "Delete",
         "new_program": "New program",
         "tooltip_cmd": "Program + arguments, e.g. calc.exe or curl https://... --insecure",
         "tooltip_label": "Text displayed to the user",
-        "tooltip_delay": "Waiting time before execution"
+        "tooltip_delay": "Waiting time before execution",
+        "error_title": "User Programs",
+        "error_read": "The settings file could not be read:\n{path}\n\n{error}\n\n"
+                      "Fix it (or delete the [extra_commands] section) and open this window again. "
+                      "Nothing was changed.",
+        "error_delay": "Row {row}: the delay \"{value}\" is not a number of seconds.",
+        "error_command": "Row {row}: the command could not be split ({error}).",
+        "error_write": "The settings file could not be saved:\n{path}\n\n{error}",
     },
     "de": {
         "dialog_title": "Nutzerprogramme",
@@ -73,77 +127,226 @@ TRANSLATIONS = {
             "Einfaches Beispiel: calc.exe<br>"
             "Beispiel mit Parametern: curl https://myserver/api --insecure<br>"
             "HTTP Anfrage mit Parametern: curl -X POST https://domotics/api "
-            "-d 'apikey=12345&action=on'<br>"
-            "Shelly Gen2 Beispiel: curl -u admin:password --insecure "
-            "http://ShellyDeviceIP/rpc/Switch.Set?id=0&on=true"
+            "-d \"apikey=IHR_SCHLUESSEL&action=on\"<br>"
+            "Shelly Gen2 Beispiel: curl -u admin:IHR_PASSWORT --insecure "
+            "http://IP_DER_STECKDOSE/rpc/Switch.Set?id=0&on=true<br>"
+            "3MF kopieren: cmd /c copy \"%EXPORT%.3mf\" \"%PROJECTDIR%\\backup.3mf\""
         ),
         "hint_label": "Name des Programmes",
-        "hint_delay": "Verzögerung in Sekunden vor der Ausführung",
+        "hint_delay": "Verzögerung in Sekunden vor der Ausführung (nach dem vorherigen Befehl)",
         "hint_default": "Wenn aktiviert, wird der Befehl standardmäßig ausgeführt",
         "btn_add": "Hinzufügen",
         "btn_del": "Löschen",
         "new_program": "Neues Programm",
         "tooltip_cmd": "Programm + Argumente, z.B. calc.exe oder curl https://... --insecure",
         "tooltip_label": "Anzeigetext für den Nutzer",
-        "tooltip_delay": "Verzögerungszeit bis zur Ausführung"
+        "tooltip_delay": "Verzögerungszeit bis zur Ausführung",
+        "error_title": "Nutzerprogramme",
+        "error_read": "Die Einstellungsdatei konnte nicht gelesen werden:\n{path}\n\n{error}\n\n"
+                      "Korrigieren Sie sie (oder löschen Sie den Abschnitt [extra_commands]) und öffnen "
+                      "Sie dieses Fenster erneut. Es wurde nichts geändert.",
+        "error_delay": "Zeile {row}: die Verzögerung „{value}“ ist keine Sekundenzahl.",
+        "error_command": "Zeile {row}: der Befehl konnte nicht zerlegt werden ({error}).",
+        "error_write": "Die Einstellungsdatei konnte nicht gespeichert werden:\n{path}\n\n{error}",
     }
 }
 
 
-
-def get_user_language():
+def cfgini_language():
     try:
         locale = FreeCADGui.getLocale().lower()
-        # Normalisation
         if locale.startswith("fr") or "french" in locale:
             return "fr"
-        if locale.startswith("en") or "english" in locale:
-            return "en"
         if locale.startswith("de") or "german" in locale:
             return "de"
-        '''
-        if locale.startswith("es") or "spanish" in locale:
-            return "es"
-        if locale.startswith("it") or "italian" in locale:
-            return "it"
-        '''
-        # Fallback
         return "en"
     except Exception:
         return "en"
 
-def tr(key):
-    lang = get_user_language()
-    return TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, key)
+
+def cfgini_tr(key):
+    lang = cfgini_language()
+    text = cfgini_TRANSLATIONS.get(lang, cfgini_TRANSLATIONS["en"]).get(key, key)
+    if key == "hint_command":
+        text += cfgini_PLACEHOLDERS.get(lang, cfgini_PLACEHOLDERS["en"])
+    return text
+
+
+# -------------------------
+# Découpage d'une ligne de commande
+# -------------------------
+def cfgini_split_command(text, windows=None):
+    """
+    Découpe une ligne de commande en liste d'arguments.
+    Windows : séparation sur les espaces, les guillemets doubles regroupent et sont
+    retirés, les « \\ » des chemins restent tels quels (\\" donne un guillemet).
+    Ailleurs : règles du shell (shlex).
+    """
+    if windows is None:
+        windows = (os.name == "nt")
+    text = text.strip()
+    if not windows:
+        return shlex.split(text)
+    parts, current, in_quotes, has_token = [], [], False, False
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == "\\" and i + 1 < len(text) and text[i + 1] == '"':
+            current.append('"')
+            has_token = True
+            i += 2
+            continue
+        if c == '"':
+            in_quotes = not in_quotes
+            has_token = True
+        elif c.isspace() and not in_quotes:
+            if has_token:
+                parts.append("".join(current))
+                current, has_token = [], False
+        else:
+            current.append(c)
+            has_token = True
+        i += 1
+    if in_quotes:
+        raise ValueError('"')
+    if has_token:
+        parts.append("".join(current))
+    return parts
+
+
+def cfgini_join_command(parts, windows=None):
+    """Inverse de cfgini_split_command : remet des guillemets là où il en faut."""
+    if windows is None:
+        windows = (os.name == "nt")
+    # Un argument avec une variable (%EXPORT%…) est aussi remis entre guillemets :
+    # elle sera remplacée par un chemin qui peut contenir des espaces.
+    has_var = lambda p: re.search(r"%[A-Z]+%", p) is not None
+    if not windows:
+        # (shlex ne traite que \ et " entre guillemets doubles : pas de shell, donc
+        # $ et ` restent tels quels)
+        return " ".join('"' + p.replace("\\", "\\\\").replace('"', '\\"') + '"'
+                        if has_var(p) and "'" not in p else shlex.quote(p)
+                        for p in map(str, parts))
+    out = []
+    for p in parts:
+        p = str(p)
+        if p == "" or any(ch.isspace() for ch in p) or '"' in p or has_var(p):
+            out.append('"' + p.replace('"', '\\"') + '"')
+        else:
+            out.append(p)
+    return " ".join(out)
+
+
+def cfgini_parse_delay(text):
+    """« 2 », « 2.5 », « 2,5 » → nombre de secondes ≥ 0 ; vide → 0 ; sinon ValueError."""
+    text = text.strip().replace(",", ".")
+    if not text:
+        return 0
+    value = float(text)
+    if value < 0 or value != value:
+        raise ValueError(text)
+    return int(value) if value == int(value) else value
+
 
 # -------------------------
 # Fonctions INI
 # -------------------------
-def load_extra_commands_from_ini(path=INI_FILE):
-    cfg = configparser.ConfigParser()
-    try:
-        cfg.read(path, encoding="utf-8")
-        if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
-            return ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
-    except:
-        pass
-    return []
+def cfgini_load_commands(path=None):
+    """Commandes de la section [extra_commands]. Lève une exception si le fichier est illisible."""
+    path = path or cfgini_INI_FILE
+    if not os.path.exists(path):
+        return []
+    cfg = configparser.ConfigParser(interpolation=None)
+    cfg.read(path, encoding="utf-8")
+    if "extra_commands" not in cfg or "EXTRA_COMMANDS" not in cfg["extra_commands"]:
+        return []
+    commands = ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
+    result = []
+    for entry in commands:
+        cmd, label, delay, default = entry
+        if isinstance(cmd, str):
+            cmd = cfgini_split_command(cmd)
+        result.append((list(cmd), str(label), delay, bool(default)))
+    return result
 
-def save_extra_commands_to_ini(commands, path=INI_FILE):
-    cfg = configparser.ConfigParser()
+
+def cfgini_save_commands(commands, path=None):
+    """
+    Réécrit seulement la section [extra_commands] ; le reste du fichier
+    (réglages, commentaires) est gardé tel quel.
+    """
+    path = path or cfgini_INI_FILE
+    lines = []
     if os.path.exists(path):
-        cfg.read(path, encoding="utf-8")
-    if "extra_commands" not in cfg:
-        cfg["extra_commands"] = {}
-    cfg["extra_commands"]["EXTRA_COMMANDS"] = str(commands)
-    with open(path, "w", encoding="utf-8") as f:
-        cfg.write(f)
+        with open(path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+    body = "[\n" + "".join(f"    {tuple(c)!r},\n" for c in commands) + "    ]"
+    section = ["[extra_commands]\n", "EXTRA_COMMANDS = " + body + "\n"]
+
+    new_lines, in_extra, written = [], False, False
+    for line in lines:
+        stripped = line.strip()
+        # En-tête de section : non indenté (une ligne indentée continue la valeur)
+        if line[:1] == "[" and stripped.endswith("]"):
+            if stripped.lower() == "[extra_commands]":
+                in_extra = True
+                if not written:
+                    new_lines.extend(section)
+                    written = True
+                continue
+            if in_extra:
+                new_lines.append("\n")
+            in_extra = False
+        if not in_extra:
+            new_lines.append(line)
+    if not written:
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines[-1] += "\n"
+        if new_lines and new_lines[-1].strip():
+            new_lines.append("\n")
+        new_lines.extend(section)
+
+    # Vérification : le fichier obtenu doit se relire à l'identique
+    check = configparser.ConfigParser(interpolation=None)
+    check.read_string("".join(new_lines))
+    if ast.literal_eval(check["extra_commands"]["EXTRA_COMMANDS"]) != [tuple(c) for c in commands]:
+        raise ValueError("EXTRA_COMMANDS")
+
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+    os.replace(tmp, path)
+
 
 # -------------------------
 # Boîte de dialogue
 # -------------------------
-def show_extra_commands_dialog():
-    dialog = QtGui.QDialog()
+def cfgini_parent_window():
+    w = QtGui.QApplication.activeWindow()
+    if w is None and FreeCADGui is not None:
+        try:
+            w = FreeCADGui.getMainWindow()
+        except Exception:
+            w = None
+    return w
+
+
+def show_extra_commands_dialog(parent=None, path=None):
+    """Ouvre la fenêtre. Renvoie True si les commandes ont été enregistrées."""
+    path = path or cfgini_INI_FILE
+    tr = cfgini_tr
+    if parent is None:
+        parent = cfgini_parent_window()
+
+    try:
+        commands = cfgini_load_commands(path)
+    except Exception as e:
+        QtGui.QMessageBox.warning(parent, tr("error_title"),
+                                  tr("error_read").format(path=path, error=e))
+        return False
+
+    dialog = QtGui.QDialog(parent)
     dialog.setWindowTitle(tr("dialog_title"))
     dialog.resize(900, 500)
 
@@ -152,8 +355,6 @@ def show_extra_commands_dialog():
     table = QtGui.QTableWidget()
     table.setColumnCount(4)
     table.setWordWrap(True)
-
-
 
     table.setHorizontalHeaderLabels([
         tr("col_command"),
@@ -176,32 +377,33 @@ def show_extra_commands_dialog():
     # Permettre de redimensionner la hauteur des lignes
     table.verticalHeader().setResizeMode(QtGui.QHeaderView.Interactive)
 
-    EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE)
-    for cmd, label, delay, default in EXTRA_COMMANDS:
+    def add_row(cmd_text="", label=None, delay=0, default=False):
         row = table.rowCount()
         table.insertRow(row)
 
-        # Commande multi-lignes
-        item_cmd = QtGui.QTableWidgetItem(" ".join(cmd))
+        item_cmd = QtGui.QTableWidgetItem(cmd_text)
         item_cmd.setFlags(item_cmd.flags() | QtCore.Qt.ItemIsEditable)
+        item_cmd.setToolTip(tr("hint_command"))
         table.setItem(row, 0, item_cmd)
 
-        # Label multi-lignes
-        item_label = QtGui.QTableWidgetItem(label)
+        item_label = QtGui.QTableWidgetItem(tr("new_program") if label is None else label)
         item_label.setFlags(item_label.flags() | QtCore.Qt.ItemIsEditable)
         table.setItem(row, 1, item_label)
 
-        # Délai
         item_delay = QtGui.QTableWidgetItem(str(delay))
         item_delay.setFlags(item_delay.flags() | QtCore.Qt.ItemIsEditable)
         table.setItem(row, 2, item_delay)
 
-        # Checkbox
         chk = QtGui.QCheckBox()
-        chk.setChecked(default)
+        chk.setChecked(bool(default))
         table.setCellWidget(row, 3, chk)
 
-    table.resizeRowsToContents()
+        table.resizeRowsToContents()
+        return row
+
+    for cmd, label, delay, default in commands:
+        add_row(cfgini_join_command(cmd), label, delay, default)
+
     # Agrandir la colonne Label (colonne 1)
     table.setColumnWidth(1, table.columnWidth(1) * 2)
     layout.addWidget(table)
@@ -214,34 +416,17 @@ def show_extra_commands_dialog():
     h_btns.addWidget(btn_del)
     layout.addLayout(h_btns)
 
-    def add_row():
-        row = table.rowCount()
-        table.insertRow(row)
-
-        item_cmd = QtGui.QTableWidgetItem("")
-        item_cmd.setFlags(item_cmd.flags() | QtCore.Qt.ItemIsEditable)
-        table.setItem(row, 0, item_cmd)
-
-        item_label = QtGui.QTableWidgetItem(tr("new_program"))
-        item_label.setFlags(item_label.flags() | QtCore.Qt.ItemIsEditable)
-        table.setItem(row, 1, item_label)
-
-        item_delay = QtGui.QTableWidgetItem("0")
-        item_delay.setFlags(item_delay.flags() | QtCore.Qt.ItemIsEditable)
-        table.setItem(row, 2, item_delay)
-
-        chk = QtGui.QCheckBox()
-        chk.setChecked(False)
-        table.setCellWidget(row, 3, chk)
-
-        table.resizeRowsToContents()
+    def on_add():
+        row = add_row()
+        table.setCurrentCell(row, 0)
+        table.editItem(table.item(row, 0))
 
     def del_row():
         row = table.currentRow()
         if row >= 0:
             table.removeRow(row)
 
-    btn_add.clicked.connect(add_row)
+    btn_add.clicked.connect(on_add)
     btn_del.clicked.connect(del_row)
 
     # Boutons OK / Annuler
@@ -249,22 +434,46 @@ def show_extra_commands_dialog():
     layout.addWidget(btns)
     dialog.setLayout(layout)
 
+    def cell_text(row, col):
+        item = table.item(row, col)
+        return item.text().strip() if item is not None else ""
+
+    def fail(row, col, message):
+        table.setCurrentCell(row, col)
+        QtGui.QMessageBox.warning(dialog, tr("error_title"), message)
+
     def save():
         new_cmds = []
         for row in range(table.rowCount()):
-            cmd_str = table.item(row, 0).text().strip()
-            label = table.item(row, 1).text().strip()
-            delay = int(table.item(row, 2).text().strip())
+            cmd_str = cell_text(row, 0)
+            if not cmd_str:
+                continue
+            try:
+                cmd = cfgini_split_command(cmd_str)
+            except ValueError as e:
+                fail(row, 0, tr("error_command").format(row=row + 1, error=e))
+                return
+            try:
+                delay = cfgini_parse_delay(cell_text(row, 2))
+            except ValueError:
+                fail(row, 2, tr("error_delay").format(row=row + 1, value=cell_text(row, 2)))
+                return
             chk = table.cellWidget(row, 3)
-            default = chk.isChecked()
-            if cmd_str:
-                new_cmds.append((cmd_str.split(), label, delay, default))
-        save_extra_commands_to_ini(new_cmds)
+            default = chk.isChecked() if chk is not None else False
+            if cmd:
+                new_cmds.append((cmd, cell_text(row, 1), delay, default))
+        try:
+            cfgini_save_commands(new_cmds, path)
+        except Exception as e:
+            QtGui.QMessageBox.warning(dialog, tr("error_title"),
+                                      tr("error_write").format(path=path, error=e))
+            return
         dialog.accept()
 
     btns.accepted.connect(save)
     btns.rejected.connect(dialog.reject)
-    dialog.exec()
+    return dialog.exec() == QtGui.QDialog.Accepted
+
 
 # -------------------------
 # Universal launch (FreeCAD)

@@ -94,7 +94,9 @@ The ⚙️ button in the options window allows you to both install and open the 
 
 - Fill in the fields in the configuration window.
 - Hover your mouse over a column title to display help tooltips.
-- Each command you define will be executed in order after the 3MF file is produced.
+- Each command you define will be executed in order after the 3MF file is produced. The delay of a command counts from the previous command; FreeCAD is not blocked while waiting.
+- Put an argument containing spaces between double quotes (`"%EXPORT%.3mf"`).
+- Commands are run directly, without a shell: commands built into the Windows command prompt (`copy`, `del`, `echo`…) need `cmd /c` in front of them.
 
 <img width="897" height="528" alt="Configuration window" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
 
@@ -112,10 +114,16 @@ Custom post-processing commands can refer to both the FreeCAD project and the ex
 
 ### Examples
 
-Copy the generated 3MF file next to the project:
+Copy the generated 3MF file into a `backup` folder of the project (Windows; the folder must exist):
 
 ```bash
-copy "%EXPORT%.3mf" "%PROJECTDIR%/backup/%EXPORTNAME%.3mf"
+cmd /c copy /y "%EXPORT%.3mf" "%PROJECTDIR%\backup\%EXPORTNAME%.3mf"
+```
+
+On Linux / macOS:
+
+```bash
+cp "%EXPORT%.3mf" "%PROJECTDIR%/backup/%EXPORTNAME%.3mf"
 ```
 
 Run a script stored in the project folder:
@@ -139,7 +147,7 @@ curl "http://192.168.xxx.xxx/relay/0?turn=on"
 Gen 2:
 
 ```bash
-http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true
+curl "http://192.168.xxx.xxx/rpc/Switch.Set?id=0&on=true"
 ```
 
 Or if your device has a password:

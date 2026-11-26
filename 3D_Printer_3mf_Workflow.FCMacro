@@ -1050,18 +1050,38 @@ def rotate_old_backups(base_name, max_backups):
 ##############################################################
 # Charge les commandes externes définies dans le fichier ini
 def load_extra_commands_from_ini(path=INI_FILE):
-    cfg = configparser.ConfigParser()
+    # interpolation=None : les commandes contiennent %PROJECT%, %EXPORT%…
+    cfg = configparser.ConfigParser(interpolation=None)
     try:
         cfg.read(path, encoding="utf-8")
         if "extra_commands" in cfg and "EXTRA_COMMANDS" in cfg["extra_commands"]:
-            return ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"])
+            commands = []
+            for entry in ast.literal_eval(cfg["extra_commands"]["EXTRA_COMMANDS"]):
+                try:
+                    cmd, label, delay, default = entry
+                    if isinstance(cmd, str):
+                        cmd = split_command_line(cmd) or []
+                    commands.append((list(cmd), str(label), float(delay or 0), bool(default)))
+                except Exception as e:
+                    print("⚠️ EXTRA_COMMANDS entry ignored:", entry, e)
+            return commands
     except Exception as e:
         print("⚠️ Read error EXTRA_COMMANDS ini:", e)
     return []
 
 
-# Fusion au démarrage : commandes ini avant celles codées en dur
-EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE) + EXTRA_COMMANDS
+# Commandes codées en dur (ci-dessus), gardées pour relire le .ini plus tard
+EXTRA_COMMANDS_BUILTIN = list(EXTRA_COMMANDS)
+
+
+def reload_extra_commands():
+    """Commandes du .ini avant celles codées en dur (relu après la fenêtre ⚙️)."""
+    global EXTRA_COMMANDS
+    EXTRA_COMMANDS = load_extra_commands_from_ini(INI_FILE) + EXTRA_COMMANDS_BUILTIN
+    return EXTRA_COMMANDS
+
+
+reload_extra_commands()
 
 def run_macro_if_exists(filename, download_url, raw_url):
     """
@@ -1072,10 +1092,12 @@ def run_macro_if_exists(filename, download_url, raw_url):
     macro_path  = os.path.join(current_dir, filename)
 
     # --- 1) Fonction interne pour exécuter la macro ---
+    # Dans son propre espace de noms : sinon ses définitions (tr, TRANSLATIONS…)
+    # remplaceraient celles de cette macro.
     def execute_macro(path):
         with open(path, "r", encoding="utf-8") as f:
             code = f.read()
-        exec(code, globals())
+        exec(compile(code, path, "exec"), {"__file__": path, "__name__": "__main__"})
 
     # --- 2) Si la macro existe → exécution immédiate ---
     if os.path.isfile(macro_path):
@@ -1178,10 +1200,10 @@ def load_config():
         "ignore_transform": True,  # valeur par défaut
         "recent_base3mf": [],      # derniers 3MF utilisés comme base
     }
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=None)
     if os.path.exists(INI_FILE):
         try:
-            config.read(INI_FILE)
+            config.read(INI_FILE, encoding="utf-8")
             if "Settings" in config:
                 s = config["Settings"]
                 if "slicer_exe" in s:
@@ -1268,11 +1290,16 @@ def save_settings(linear, angular_rad, slicer_path, ignore_transform):
 
         new_lines.append(line)
 
-    # Ajout des clés manquantes juste après [Settings]
+    # Ajout des clés manquantes juste après [Settings] (section créée en tête si
+    # absente : fichier créé par la macro ConfigIni avec seulement [extra_commands])
+    insert_index = None
     for i, line in enumerate(new_lines):
         if line.strip().startswith("[Settings]"):
             insert_index = i + 1
             break
+    if insert_index is None:
+        new_lines[0:0] = ["[Settings]\n", "\n"]
+        insert_index = 1
 
     if not found_linear:
         new_lines.insert(insert_index, f"linear_deflection = {linear}\n")
@@ -2060,23 +2087,36 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
         QtCore.QTimer.singleShot(0, build_preview)
         QtCore.QTimer.singleShot(0, build_estimate)
 
-    # Cases pour les commandes externes
+    # Cases pour les commandes externes (reconstruites après la fenêtre ⚙️)
     extra_checks = []
-    if EXTRA_COMMANDS:
-        lbl_ext = QtGui.QLabel(tr("external_actions"))
-        lbl_ext.setToolTip(tr("hint_external_actions") )
-        layout.addWidget(lbl_ext)
+    extra_box = QtGui.QWidget()
+    extra_layout = QtGui.QVBoxLayout(extra_box)
+    extra_layout.setContentsMargins(0, 0, 0, 0)
+    layout.addWidget(extra_box)
 
-        for cmd, label, delay, default in EXTRA_COMMANDS:
-            chk = QtGui.QCheckBox(label)
-            chk.setChecked(default)
-            layout.addWidget(chk)
-            extra_checks.append((chk, cmd, delay))
-    else:
-        # 👉 Afficher un libellé même si aucune commande n'est définie
-        lbl_ext = QtGui.QLabel(tr("no_external_actions"))
-        lbl_ext.setToolTip(tr("hint_external_actions") )
-        layout.addWidget(lbl_ext)
+    def build_extra_checks():
+        while extra_layout.count():
+            w = extra_layout.takeAt(0).widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+        extra_checks.clear()
+        if EXTRA_COMMANDS:
+            lbl_ext = QtGui.QLabel(tr("external_actions"))
+            lbl_ext.setToolTip(tr("hint_external_actions"))
+            extra_layout.addWidget(lbl_ext)
+            for cmd, label, delay, default in EXTRA_COMMANDS:
+                chk = QtGui.QCheckBox(label)
+                chk.setChecked(default)
+                extra_layout.addWidget(chk)
+                extra_checks.append((chk, cmd, delay))
+        else:
+            # 👉 Afficher un libellé même si aucune commande n'est définie
+            lbl_ext = QtGui.QLabel(tr("no_external_actions"))
+            lbl_ext.setToolTip(tr("hint_external_actions"))
+            extra_layout.addWidget(lbl_ext)
+
+    build_extra_checks()
 
     # --- Bouton "+" pour installer la macro ConfigIni ---
     btn_add_macro = QtGui.QPushButton("⚙️")
@@ -2085,11 +2125,17 @@ def ask_user_options(current_slicer, current_linear, current_angular, ignore_tra
 
 
     def install_config_macro():
-        run_macro_if_exists(
-            "3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
-            "https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
-            "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro"
-        )
+        try:
+            run_macro_if_exists(
+                "3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+                "https://github.com/2cv001/3D_printer_3mf_workflow/blob/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro",
+                "https://raw.githubusercontent.com/2cv001/3D_printer_3mf_workflow/main/3D_Printer_3mf_Workflow_ConfigIni.FCMacro"
+            )
+        except Exception as e:
+            show_message(tr("error_title"), str(e))
+        # Commandes peut-être modifiées : on relit le .ini
+        reload_extra_commands()
+        build_extra_checks()
 
     btn_add_macro.clicked.connect(install_config_macro)
     layout.addWidget(btn_add_macro)
@@ -2661,8 +2707,8 @@ def build_mesh_cost_model(selection, linear_deflection, angular_deflection):
 def get_mesh_time_factor():
     """Recalage du temps estimé, appris sur cette machine (fichier ini)."""
     try:
-        config = configparser.ConfigParser()
-        config.read(INI_FILE)
+        config = configparser.ConfigParser(interpolation=None)
+        config.read(INI_FILE, encoding="utf-8")
         value = float(config["Settings"].get("mesh_time_factor", "1"))
         return min(max(value, MESH_TIME_FACTOR_MIN), MESH_TIME_FACTOR_MAX)
     except Exception:
@@ -2695,8 +2741,8 @@ def update_mesh_time_factor(model, linear_deflection, angular_deflection, real_s
 
 def get_target_export_seconds():
     try:
-        config = configparser.ConfigParser()
-        config.read(INI_FILE)
+        config = configparser.ConfigParser(interpolation=None)
+        config.read(INI_FILE, encoding="utf-8")
         return max(1, int(float(config["Settings"].get("target_export_seconds",
                                                         str(DEFAULT_TARGET_EXPORT_SECONDS)))))
     except Exception:
@@ -4344,6 +4390,9 @@ def run_extra_commands(extra_cmds, project_path, export_basepath):
     # Nom du projet sans extension
     project_name = os.path.basename(project_basepath)
 
+    # Délais cumulés (chaque délai compte après la commande précédente), avec des
+    # minuteries Qt : FreeCAD n'est pas bloqué pendant l'attente.
+    total_delay = 0.0
     for checked, cmd, delay in extra_cmds:
         if not checked:
             continue
@@ -4360,13 +4409,21 @@ def run_extra_commands(extra_cmds, project_path, export_basepath):
         ]
 
         try:
-            if delay > 0:
-                time.sleep(delay)
+            total_delay += max(0.0, float(delay or 0))
+        except (TypeError, ValueError):
+            pass
+        if total_delay <= 0:
+            _launch_extra_command(cmd)
+        else:
+            QtCore.QTimer.singleShot(int(total_delay * 1000),
+                                     lambda c=cmd: _launch_extra_command(c))
 
-            subprocess.Popen(cmd)
 
-        except Exception as e:
-            show_message(tr("error_title"), f"{tr('error_external_cmd')} {e}")
+def _launch_extra_command(cmd):
+    try:
+        subprocess.Popen(cmd)
+    except Exception as e:
+        show_message(tr("error_title"), f"{tr('error_external_cmd')} {e}\n{' '.join(cmd)}")
 
 # -----------------------------------------------------------------------------
 # Routine principale : exporte la sélection en 3MF/STL, injecte géométrie,

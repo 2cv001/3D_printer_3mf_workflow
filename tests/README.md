@@ -34,6 +34,7 @@ computer (QIDIStudio, Bambu Studio, OrcaSlicer, in command line).
 | `test_thumbs.py` | Thumbnails of the 3MF files in the base list |
 | `test_preview.py` | Preview of the selected objects (images in `tests/out/`) |
 | `test_colors.py` | Colors of the preview (appearance per object or per face, PartDesign Body) |
+| `test_configini.py` | User commands (ConfigIni macro): `%PROJECT%`… variables in the .ini, quotes, delays, invalid delay or unreadable file, ⚙️ button leaving the main macro's texts intact (offscreen, on copies in `tests/out/`) |
 | `test_base3mf_labels.py`, `test_base3mf_match.py`, `test_base3mf_info.py` | Base 3MF list: labels of bases from other folders, default base by object name, explanation text |
 
 ## Fixtures
