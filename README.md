@@ -93,7 +93,9 @@ The ⚙️ button in the options window allows you to both install and open the 
 
 <img width="1134" height="805" alt="image" src="https://github.com/user-attachments/assets/86b85935-095a-40db-98c6-453d60be281e" />
 
-<img width="897" height="528" alt="Configuration window" src="https://github.com/user-attachments/assets/6b2dad76-2de4-47f7-9472-bd245a9b6b63" />
+<img width="896" height="681" alt="Configuration window" src="https://github.com/user-attachments/assets/63e9cb87-4f19-40c4-bb60-8ba5dae6529f" />
+
+*Configuration window: the selected command has a mistake (`C:/…` instead of `C:\…`), the check points it out before you run it.*
 
 Each row of the table is a command:
 
